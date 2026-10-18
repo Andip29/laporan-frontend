@@ -15,6 +15,9 @@ import WorksheetManager from "./components/worksheet/WorksheetManager";
 import PhotoGallery from "./components/gallery/PhotoGallery";
 import LoginModal from "./components/auth/LoginModal";
 
+// 1. Impor Komponent ExcelChartViewer dari folder reports
+import ExcelChartViewer from "./components/reports/ExcelChartViewer";
+
 export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [reports, setReports] = useState([]);
@@ -122,7 +125,7 @@ export default function App() {
         image_urls: imageUrls,
       });
 
-      alert("Laporan Berhasil Disimpan Permanen ke MySQL Laragon!");
+      alert("Laporan Berhasil Disimpan Permanen!");
       setJenisPekerjaan("");
       setPhotoFiles([]);
       fetchReports();
@@ -180,6 +183,10 @@ export default function App() {
         {activeTab === "dashboard" && (
           <div className="space-y-6 w-full">
             <StatsCards stats={stats} />
+
+            {/* 2. Menampilkan Komponen Visualisasi Grafik Excel di Dashboard */}
+            <ExcelChartViewer />
+
             <FilterBar
               search={search}
               setSearch={setSearch}
@@ -282,18 +289,23 @@ export default function App() {
 
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4 w-full">
                 <h3 className="font-bold text-slate-800 text-md border-b pb-2 border-slate-100 flex items-center">
-                  <i className="fa-solid fa-camera text-blue-600 mr-2"></i>{" "}
-                  Upload Foto Dokumentasi
+                  <i className="fa-solid fa-file-arrow-up text-blue-600 mr-2"></i>{" "}
+                  Upload Lampiran Berkonsultasi & Dokumentasi
                 </h3>
+                {/* 3. Menyesuaikan Input File agar Menerima Word, Excel, CSV, PDF, dan Gambar */}
                 <input
                   type="file"
                   multiple
-                  accept="image/*"
+                  accept=".xlsx, .xls, .csv, .doc, .docx, .pdf, image/*"
                   onChange={(e) =>
                     setPhotoFiles(Array.from(e.target.files || []))
                   }
-                  className="block w-full text-sm text-slate-500 border border-slate-300 rounded-xl p-2"
+                  className="block w-full text-sm text-slate-500 border border-slate-300 rounded-xl p-2 cursor-pointer file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                 />
+                <p className="text-xs text-slate-400">
+                  Format yang didukung: Excel (.xlsx, .xls, .csv), Word (.doc,
+                  .docx), PDF, dan Foto/Gambar.
+                </p>
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">
