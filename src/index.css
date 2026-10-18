@@ -1,0 +1,27 @@
+/* Reset tampilan halaman penuh */
+html,
+body,
+#root {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
+}
+
+/* Memaksa semua kotak input selalu berwarna putih & teks hitam/gelap jelas */
+input,
+select,
+textarea,
+option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Memastikan tulisan contoh (placeholder) terlihat jelas */
+::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1 !important;
+}
