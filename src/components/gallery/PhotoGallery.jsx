@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = "https://laporan-backend-seven.vercel.app/api";
 
 export default function PhotoGallery() {
   const [photos, setPhotos] = useState([]);
@@ -111,7 +111,11 @@ export default function PhotoGallery() {
                 className="h-48 overflow-hidden bg-slate-100 flex items-center justify-center cursor-pointer relative"
               >
                 <img
-                  src={`http://localhost:5000${p.url}`}
+                  src={
+                    imgUrl.startsWith("http")
+                      ? imgUrl
+                      : `https://laporan-backend-seven.vercel.app${imgUrl}`
+                  }
                   alt="dokumentasi"
                   className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                 />

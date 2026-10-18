@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-const API_BASE = "http://localhost:5000/api";
+// Menggunakan URL Vercel Backend yang valid
+const BACKEND_URL = "https://laporan-backend-seven.vercel.app";
+const API_BASE = `${BACKEND_URL}/api`;
 
 export default function DriveSection() {
   const [files, setFiles] = useState([]);
@@ -23,7 +25,6 @@ export default function DriveSection() {
 
   const fetchFiles = async () => {
     try {
-      // Mengirimkan token di header agar backend memfilter file berdasarkan user_id
       const res = await axios.get(`${API_BASE}/drive`, getAuthHeader());
       setFiles(res.data);
     } catch (e) {
@@ -41,12 +42,20 @@ export default function DriveSection() {
 
     setUploading(true);
     try {
-      // Mengirimkan token saat upload file baru
-      await axios.post(`${API_BASE}/drive`, formData, getAuthHeader());
+      await axios.post(`${API_BASE}/drive`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
       alert("File berhasil disimpan ke Drive Pribadi Anda!");
       fetchFiles();
     } catch (err) {
-      alert("Gagal mengunggah file. Pastikan Anda sudah login!");
+      console.error("Upload error:", err);
+      alert(
+        "Gagal mengunggah file: " +
+          (err.response?.data?.error || "Pastikan Anda sudah login!"),
+      );
     } finally {
       setUploading(false);
     }
@@ -55,7 +64,6 @@ export default function DriveSection() {
   const handleDelete = async (id) => {
     if (!confirm("Yakin ingin menghapus file ini dari Drive Anda?")) return;
     try {
-      // Mengirimkan token saat hapus file
       await axios.delete(`${API_BASE}/drive/${id}`, getAuthHeader());
       fetchFiles();
     } catch (err) {
@@ -143,7 +151,11 @@ export default function DriveSection() {
                     </td>
                     <td className="px-6 py-4 text-center space-x-2">
                       <a
-                        href={`http://localhost:5000${f.file_url}`}
+                        href={
+                          f.file_url?.startsWith("http")
+                            ? f.file_url
+                            : `${BACKEND_URL}${f.file_url}`
+                        }
                         target="_blank"
                         rel="noreferrer"
                         className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center"
