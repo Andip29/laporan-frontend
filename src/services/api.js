@@ -1,7 +1,7 @@
 import axios from "axios";
 
-// URL Backend Vercel
-const API_BASE = "https://laporan-backend-xxxx.vercel.app/api";
+// URL Backend Vercel Akang yang valid:
+const API_BASE = "https://laporan-backend-seven.vercel.app/api";
 
 axios.interceptors.request.use(
   (config) => {

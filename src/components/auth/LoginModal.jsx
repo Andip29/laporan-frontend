@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 
-const API_BASE = "https://laporan-backend-xxxx.vercel.app/api";
+const API_BASE = "https://laporan-backend-seven.vercel.app/api";
 
 export default function LoginModal({ onLoginSuccess }) {
   const [isRegister, setIsRegister] = useState(false);
