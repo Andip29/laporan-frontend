@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-// URL Backend Vercel Production
+// Pastikan Menggunakan URL Vercel Backend yang valid
 const BACKEND_URL = "https://laporan-backend-seven.vercel.app";
 const API_BASE = `${BACKEND_URL}/api`;
 
@@ -13,7 +13,6 @@ export default function DriveSection() {
     fetchFiles();
   }, []);
 
-  // Header Authorization dengan Token JWT
   const getAuthHeader = () => {
     const token = localStorage.getItem("token");
     return {
