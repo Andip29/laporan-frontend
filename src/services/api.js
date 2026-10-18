@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = "https://laporan-backend-seven.vercel.app/";
 
 // Interceptor untuk menyisipkan Token JWT otomatis ke setiap request
 axios.interceptors.request.use(
