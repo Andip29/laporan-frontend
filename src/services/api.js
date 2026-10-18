@@ -17,5 +17,6 @@ axios.interceptors.request.use(
 export const reportService = {
   getAll: () => axios.get(`${API_BASE}/reports`),
   create: (data) => axios.post(`${API_BASE}/reports`, data),
-  uploadPhotos: (formData) => axios.post(`${API_BASE}/upload`, formData),
+  uploadPhotos: (formData) =>
+    axios.post(`${API_BASE}/reports/upload`, formData),
 };

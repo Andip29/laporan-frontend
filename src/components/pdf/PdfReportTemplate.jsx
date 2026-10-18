@@ -1,5 +1,8 @@
 import React from "react";
 
+// URL Vercel Backend Production
+const BACKEND_URL = "https://laporan-backend-seven.vercel.app";
+
 export default function PdfReportTemplate({ reports }) {
   return (
     <>
@@ -41,7 +44,7 @@ export default function PdfReportTemplate({ reports }) {
                 <td className="font-bold p-1">Pekerjaan</td>
                 <td className="p-1">: {r.form_data?.jenisPekerjaan || "-"}</td>
                 <td className="font-bold p-1">Status Storage</td>
-                <td className="p-1">: Tersimpan MySQL</td>
+                <td className="p-1">: Tersimpan TiDB Cloud</td>
               </tr>
             </tbody>
           </table>
@@ -120,7 +123,9 @@ export default function PdfReportTemplate({ reports }) {
                     className="flex-1 text-center border border-slate-300 rounded p-2"
                   >
                     <img
-                      src={`http://localhost:5000${url}`}
+                      src={
+                        url.startsWith("http") ? url : `${BACKEND_URL}${url}`
+                      }
                       alt="foto"
                       className="max-h-40 mx-auto object-contain rounded"
                     />
