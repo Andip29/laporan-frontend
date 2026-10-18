@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-// Menggunakan URL Vercel Backend yang valid
+// URL Backend Vercel Production
 const BACKEND_URL = "https://laporan-backend-seven.vercel.app";
 const API_BASE = `${BACKEND_URL}/api`;
 
@@ -13,7 +13,7 @@ export default function DriveSection() {
     fetchFiles();
   }, []);
 
-  // Helper untuk mendapatkan Header Token JWT dari LocalStorage
+  // Header Authorization dengan Token JWT
   const getAuthHeader = () => {
     const token = localStorage.getItem("token");
     return {
@@ -37,6 +37,12 @@ export default function DriveSection() {
     const selectedFile = e.target.files[0];
     if (!selectedFile) return;
 
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Sesi login tidak ditemukan. Silakan Logout lalu Login kembali!");
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", selectedFile);
 
@@ -45,17 +51,16 @@ export default function DriveSection() {
       await axios.post(`${API_BASE}/drive`, formData, {
         headers: {
           "Content-Type": "multipart/form-data",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${token}`,
         },
       });
       alert("File berhasil disimpan ke Drive Pribadi Anda!");
       fetchFiles();
     } catch (err) {
-      console.error("Upload error:", err);
-      alert(
-        "Gagal mengunggah file: " +
-          (err.response?.data?.error || "Pastikan Anda sudah login!"),
-      );
+      console.error("Upload error detail:", err.response?.data || err.message);
+      const serverMessage =
+        err.response?.data?.error || err.message || "Gagal mengunggah file.";
+      alert("Gagal mengunggah file: " + serverMessage);
     } finally {
       setUploading(false);
     }
