@@ -9,26 +9,42 @@ export default function PhotoGallery() {
   const [uploading, setUploading] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
 
+  // Ambil token JWT dari localStorage
+  const getAuthHeader = () => {
+    const token = localStorage.getItem("token");
+    return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+  };
+
   useEffect(() => {
     fetchPhotos();
   }, []);
 
   const fetchPhotos = async () => {
     try {
-      // API ini sudah dilindungi authMiddleware sehingga hanya mengembalikan laporan milik user yang sedang login
-      const resReports = await axios.get(`${API_BASE}/reports`);
+      // Mengirimkan token agar tidak dikira Unauthorized (401)
+      const resReports = await axios.get(
+        `${API_BASE}/reports`,
+        getAuthHeader(),
+      );
       const allPhotos = [];
 
       resReports.data.forEach((r) => {
         if (r.image_urls) {
-          r.image_urls.forEach((url) =>
-            allPhotos.push({
-              id: `report-${r.id}-${url}`,
-              url,
-              source: `Laporan #${r.id} (${r.submitted_by})`,
-              date: r.created_at,
-            }),
-          );
+          // Parsing jika image_urls berbentuk string JSON
+          const urls =
+            typeof r.image_urls === "string"
+              ? JSON.parse(r.image_urls)
+              : r.image_urls;
+          if (Array.isArray(urls)) {
+            urls.forEach((url) =>
+              allPhotos.push({
+                id: `report-${r.id}-${url}`,
+                url,
+                source: `Laporan #${r.id} (${r.submitted_by || "User"})`,
+                date: r.created_at,
+              }),
+            );
+          }
         }
       });
 
@@ -43,13 +59,28 @@ export default function PhotoGallery() {
     if (files.length === 0) return;
 
     const formData = new FormData();
-    files.forEach((f) => formData.append("photos", f));
+    files.forEach((f) => formData.append("photos", f)); // Dikirim dengan field 'photos'
 
     setUploading(true);
     try {
-      const resUpload = await axios.post(`${API_BASE}/upload`, formData);
+      // Mengirimkan token dan header multipart
+      const config = {
+        headers: {
+          ...getAuthHeader().headers,
+          "Content-Type": "multipart/form-data",
+        },
+      };
 
-      const newPhotoObjects = resUpload.data.imageUrls.map((url) => ({
+      const resUpload = await axios.post(
+        `${API_BASE}/upload`,
+        formData,
+        config,
+      );
+
+      // Mendukung array imageUrls maupun url tunggal dari backend
+      const uploadedUrls = resUpload.data.imageUrls || [resUpload.data.url];
+
+      const newPhotoObjects = uploadedUrls.map((url) => ({
         id: `upload-${Date.now()}-${url}`,
         url,
         source: "Upload Langsung Galeri",
@@ -59,7 +90,11 @@ export default function PhotoGallery() {
       setPhotos((prev) => [...newPhotoObjects, ...prev]);
       alert("Foto dokumentasi berhasil diunggah!");
     } catch (err) {
-      alert("Gagal mengunggah foto. Pastikan server backend aktif!");
+      console.error("Error upload:", err.response?.data || err.message);
+      alert(
+        err.response?.data?.error ||
+          "Gagal mengunggah foto. Pastikan server backend aktif!",
+      );
     } finally {
       setUploading(false);
     }
@@ -113,9 +148,9 @@ export default function PhotoGallery() {
               >
                 <img
                   src={
-                    imgUrl.startsWith("http")
-                      ? imgUrl
-                      : `https://laporan-backend-seven.vercel.app${imgUrl}`
+                    p.url?.startsWith("http") || p.url?.startsWith("data:")
+                      ? p.url
+                      : `${BACKEND_URL}${p.url}`
                   }
                   alt="dokumentasi"
                   className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
