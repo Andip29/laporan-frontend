@@ -41,7 +41,7 @@ export default function ExcelChartViewer() {
     return str;
   };
 
-  // 2. Koreksi pH (misal: 764 -> 7.64 atau 7,64 -> 7.64)
+  // 2. Koreksi Nilai pH
   const parsePH = (val) => {
     let num = parseFloat(String(val).replace(",", "."));
     if (isNaN(num)) return 0;
@@ -50,8 +50,8 @@ export default function ExcelChartViewer() {
     return parseFloat(num.toFixed(2));
   };
 
-  // 3. Clean Angka Normal (Debit)
-  const parseDebit = (val) => {
+  // 3. Clean Angka Normal (Meter Debit)
+  const parseMeterDebit = (val) => {
     const num = parseFloat(String(val).replace(",", "."));
     return isNaN(num) ? 0 : num;
   };
@@ -99,7 +99,7 @@ export default function ExcelChartViewer() {
         const dateStr = parseExcelDate(rawDate);
         const lowerDate = String(rawDate).toLowerCase();
 
-        // FILTER DENGAN KETAT: Abaikan header (Lokasi, Bulan, Area, Keterangan, Tanggal)
+        // ABAIKAN BARIS HEADER
         if (
           !dateStr ||
           lowerDate.includes("lokasi") ||
@@ -113,13 +113,13 @@ export default function ExcelChartViewer() {
 
         parsedData.push({
           tanggal: dateStr,
-          // OUTLET 1
+          // OUTLET I
           phOutlet1: parsePH(row[2]), // Kolom C: pH Outlet I
-          debitOutlet1: parseDebit(row[11]), // Kolom L: Selisih Debit Outlet I
+          meterDebitOutlet1: parseMeterDebit(row[10]), // Kolom K: Meter Debit Outlet I
 
-          // OUTLET 2
+          // OUTLET II
           phOutlet2: parsePH(row[15]), // Kolom P: pH Outlet II
-          debitOutlet2: parseDebit(row[22]), // Kolom W: Selisih Debit Outlet II
+          meterDebitOutlet2: parseMeterDebit(row[21]), // Kolom V: Meter Debit Outlet II
         });
       });
 
@@ -143,8 +143,8 @@ export default function ExcelChartViewer() {
         maxSafe: 9,
       },
       {
-        title: "Grafik Selisih Debit (M3) - Outlet I",
-        key: "debitOutlet1",
+        title: "Grafik Meter Debit IPAL - Outlet I",
+        key: "meterDebitOutlet1",
         type: "debit",
         color: "bg-blue-500",
       },
@@ -156,8 +156,8 @@ export default function ExcelChartViewer() {
         maxSafe: 9,
       },
       {
-        title: "Grafik Selisih Debit (M3) - Outlet II",
-        key: "debitOutlet2",
+        title: "Grafik Meter Debit IPAL - Outlet II",
+        key: "meterDebitOutlet2",
         type: "debit",
         color: "bg-teal-500",
       },
@@ -180,11 +180,11 @@ export default function ExcelChartViewer() {
         <div>
           <h3 className="text-lg font-bold text-slate-800 flex items-center">
             <i className="fa-solid fa-file-excel text-emerald-600 mr-2.5"></i>{" "}
-            Visualisasi pH & Debit (Outlet I & Outlet II)
+            Visualisasi pH & Meter Debit (Outlet I & Outlet II)
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Menampilkan data grafik pH dan Debit IPAL harian untuk Outlet 1 dan
-            Outlet 2.
+            Menampilkan data harian pH dan Meter Debit IPAL untuk Outlet I dan
+            Outlet II.
           </p>
         </div>
 
@@ -246,7 +246,7 @@ export default function ExcelChartViewer() {
         </div>
       </div>
 
-      {/* TAMPILAN GRAFIK 4 PARAMETER (pH & Debit Outlet I & II) */}
+      {/* TAMPILAN GRAFIK 4 PARAMETER (pH & Meter Debit Outlet I & II) */}
       {dataRows.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
           {paramCharts.map((chart, idx) => {
@@ -283,7 +283,7 @@ export default function ExcelChartViewer() {
                           key={rIdx}
                           className="flex flex-col items-center flex-1 h-full justify-end min-w-[28px]"
                         >
-                          {/* Angka Nilai */}
+                          {/* Angka Nilai Meter Debit / pH */}
                           <span className="text-[10px] font-extrabold text-cyan-300 mb-1">
                             {val}
                           </span>
@@ -311,7 +311,7 @@ export default function ExcelChartViewer() {
         <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
           <i className="fa-solid fa-spinner animate-spin text-2xl text-blue-600 mb-2 block"></i>
           <p className="text-sm font-semibold text-slate-600">
-            Sedang memuat data pH & Debit Outlet I dan II...
+            Sedang memuat data pH & Meter Debit Outlet I dan II...
           </p>
         </div>
       )}
