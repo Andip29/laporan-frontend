@@ -22,30 +22,27 @@ export default function ExcelChartViewer() {
   const [dataRows, setDataRows] = useState([]);
   const [paramCharts, setParamCharts] = useState([]);
 
-  // Fungsi Konversi String (Termasuk mengubah koma ',' menjadi titik '.') ke Angka Desimal
+  // 1. Mengubah Koma (,) ke Titik (.) dan Konversi ke Angka Desimal Presisi
   const parseNumberWithComma = (val) => {
     if (val === null || val === undefined || val === "") return 0;
     if (typeof val === "number") return val;
 
     let str = String(val).trim();
-    // Jika format tanggal gviz Date(YYYY,M,D)
-    if (str.startsWith("Date(")) {
-      return 0;
-    }
+    if (str.startsWith("Date(")) return 0;
+
     // Ganti koma dengan titik untuk desimal
     str = str.replace(",", ".");
     const num = parseFloat(str);
     return isNaN(num) ? 0 : num;
   };
 
-  // Fungsi Parsing Tanggal dari Respon GViz Google Sheets
+  // 2. Format Tanggal dari Respon GViz Google Sheets
   const parseGVizDate = (val) => {
     if (!val) return "";
     const str = String(val);
     if (str.startsWith("Date(")) {
       const parts = str.replace("Date(", "").replace(")", "").split(",");
       if (parts.length >= 3) {
-        const year = parts[0];
         const month = String(parseInt(parts[1]) + 1).padStart(2, "0");
         const day = String(parts[2]).padStart(2, "0");
         return `${month}-${day}`;
@@ -54,7 +51,7 @@ export default function ExcelChartViewer() {
     return str.slice(0, 10);
   };
 
-  // Fungsi Parsing Simbol (+ / -) untuk Aliran
+  // 3. Parsing Simbol Aliran (+ = 1, - = 0)
   const parseAliran = (val) => {
     if (!val) return 0;
     const str = String(val).trim();
@@ -72,7 +69,7 @@ export default function ExcelChartViewer() {
     }
   }, [activeSheet]);
 
-  // BACA DATA DARI GOOGLE SHEETS LIVE
+  // BACA DATA GOOGLE SHEETS LIVE
   const fetchGoogleSheetData = async (sheetName) => {
     if (!sheetInput) return alert("Silakan masukkan link / ID Google Sheets!");
     setLoading(true);
@@ -94,7 +91,7 @@ export default function ExcelChartViewer() {
       const rows = data.table.rows || [];
 
       const cleanRows = [];
-      // Data harian dimulai dari baris indeks 5 (Baris ke-6 di Excel: 02-01-2026)
+      // Data Harian Dimulai dari Baris Ke-6 (Indeks Array 5)
       rows.slice(5).forEach((r) => {
         if (!r.c) return;
 
@@ -111,11 +108,21 @@ export default function ExcelChartViewer() {
 
         cleanRows.push({
           tanggal: formattedDate,
-          suhuKiri: parseNumberWithComma(r.c[2]?.v ?? r.c[2]?.f), // Kolom C: Suhu
-          phKiri: parseNumberWithComma(r.c[3]?.v ?? r.c[3]?.f), // Kolom D: pH
-          aliranKiri: parseAliran(r.c[4]?.v ?? r.c[4]?.f), // Kolom E: Aliran (+/-)
-          tdsKiri: parseNumberWithComma(r.c[7]?.v ?? r.c[7]?.f), // Kolom H: TDS
-          debitKiri: parseNumberWithComma(r.c[10]?.v ?? r.c[10]?.f), // Kolom K: Debit Meter
+          // OUTLET I (KIRI)
+          suhuKiri: parseNumberWithComma(r.c[1]?.v ?? r.c[1]?.f), // Kolom B: Suhu
+          phKiri: parseNumberWithComma(r.c[2]?.v ?? r.c[2]?.f), // Kolom C: pH
+          aliranKiri: parseAliran(r.c[3]?.v ?? r.c[3]?.f), // Kolom D: Aliran (+/-)
+          tdsKiri: parseNumberWithComma(r.c[6]?.v ?? r.c[6]?.f), // Kolom G: TDS
+          usiaIkan: parseNumberWithComma(r.c[9]?.v ?? r.c[9]?.f), // Kolom J: Usia Ikan
+          debitKiri: parseNumberWithComma(r.c[10]?.v ?? r.c[10]?.f), // Kolom K: Meter Debit
+          selisihKiri: parseNumberWithComma(r.c[11]?.v ?? r.c[11]?.f), // Kolom L: Selisih M3
+
+          // OUTLET II (KANAN)
+          suhuKanan: parseNumberWithComma(r.c[14]?.v ?? r.c[14]?.f), // Kolom O: Suhu Kanan
+          phKanan: parseNumberWithComma(r.c[15]?.v ?? r.c[15]?.f), // Kolom P: pH Kanan
+          aliranKanan: parseAliran(r.c[16]?.v ?? r.c[16]?.f), // Kolom Q: Aliran Kanan
+          tdsKanan: parseNumberWithComma(r.c[19]?.v ?? r.c[19]?.f), // Kolom T: TDS Kanan
+          selisihKanan: parseNumberWithComma(r.c[22]?.v ?? r.c[22]?.f), // Kolom W: Selisih M3 Kanan
         });
       });
 
@@ -131,7 +138,7 @@ export default function ExcelChartViewer() {
     }
   };
 
-  // BACA FILE EXCEL MANUAL (.XLSX)
+  // BACA FILE EXCEL MANUALLY (.XLSX)
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -156,11 +163,18 @@ export default function ExcelChartViewer() {
           ) {
             cleanRows.push({
               tanggal: String(tanggalVal).slice(0, 10),
-              suhuKiri: parseNumberWithComma(r[2]),
-              phKiri: parseNumberWithComma(r[3]),
-              aliranKiri: parseAliran(r[4]),
-              tdsKiri: parseNumberWithComma(r[7]),
+              suhuKiri: parseNumberWithComma(r[1]),
+              phKiri: parseNumberWithComma(r[2]),
+              aliranKiri: parseAliran(r[3]),
+              tdsKiri: parseNumberWithComma(r[6]),
+              usiaIkan: parseNumberWithComma(r[9]),
               debitKiri: parseNumberWithComma(r[10]),
+              selisihKiri: parseNumberWithComma(r[11]),
+              suhuKanan: parseNumberWithComma(r[14]),
+              phKanan: parseNumberWithComma(r[15]),
+              aliranKanan: parseAliran(r[16]),
+              tdsKanan: parseNumberWithComma(r[19]),
+              selisihKanan: parseNumberWithComma(r[22]),
             });
           }
         });
@@ -188,21 +202,48 @@ export default function ExcelChartViewer() {
         maxSafe: 9,
       },
       {
-        title: "Grafik Aliran - Outlet I (1=Lancar, 0=Tidak)",
-        key: "aliranKiri",
-        type: "kategori",
-      },
-      {
         title: "Grafik TDS - Outlet I",
         key: "tdsKiri",
         type: "normal",
         color: "bg-indigo-500",
       },
       {
-        title: "Grafik Meter Debit IPAL",
-        key: "debitKiri",
+        title: "Grafik Selisih Debit (M3) - Outlet I",
+        key: "selisihKiri",
         type: "normal",
         color: "bg-blue-500",
+      },
+      {
+        title: "Grafik Usia Ikan (Hari)",
+        key: "usiaIkan",
+        type: "normal",
+        color: "bg-cyan-600",
+      },
+      {
+        title: "Grafik Suhu (°C) - Outlet II",
+        key: "suhuKanan",
+        type: "suhu",
+        minSafe: 25,
+        maxSafe: 38,
+      },
+      {
+        title: "Grafik pH - Outlet II",
+        key: "phKanan",
+        type: "ph",
+        minSafe: 6,
+        maxSafe: 9,
+      },
+      {
+        title: "Grafik TDS - Outlet II",
+        key: "tdsKanan",
+        type: "normal",
+        color: "bg-purple-500",
+      },
+      {
+        title: "Grafik Selisih Debit (M3) - Outlet II",
+        key: "selisihKanan",
+        type: "normal",
+        color: "bg-teal-500",
       },
     ]);
   };
@@ -217,9 +258,6 @@ export default function ExcelChartViewer() {
       return val >= 6 && val <= 9
         ? "bg-emerald-500"
         : "bg-rose-600 animate-pulse";
-    }
-    if (chart.type === "kategori") {
-      return val === 1 ? "bg-cyan-500" : "bg-rose-500";
     }
     return chart.color || "bg-blue-500";
   };
@@ -348,7 +386,7 @@ export default function ExcelChartViewer() {
                           key={rIdx}
                           className="flex flex-col items-center flex-1 h-full justify-end min-w-[28px]"
                         >
-                          {/* Angka Nilai Tampil Tepat dan Presisi */}
+                          {/* Angka Nilai Tampil Tepat (25.4, 7.23, 378, dll) */}
                           <span className="text-[10px] font-extrabold text-cyan-300 mb-1">
                             {val}
                           </span>
