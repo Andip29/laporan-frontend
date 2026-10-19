@@ -1,16 +1,11 @@
 import React, { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
 
 export default function ExcelChartViewer() {
   const [sheetInput, setSheetInput] = useState(
     "1Catq1SEdWG61MdY6TVPB2bO1Wk-JYdNxZV2eiW_cX8I",
   );
-  const [activeSheet, setActiveSheet] = useState("September 2026");
-  const [loading, setLoading] = useState(false);
-  const [dataRows, setDataRows] = useState([]);
-  const [paramCharts, setParamCharts] = useState([]);
-
-  // Daftar Tab Sheet Bulan
-  const months = [
+  const [sheetNames, setSheetNames] = useState([
     "Januari 2026",
     "Februari 2026",
     "Maret 2026",
@@ -21,23 +16,30 @@ export default function ExcelChartViewer() {
     "Agustus 2026",
     "September 2026",
     "Oktober 2026",
-  ];
+  ]);
+  const [activeSheet, setActiveSheet] = useState("September 2026");
+  const [loading, setLoading] = useState(false);
+  const [dataRows, setDataRows] = useState([]);
+  const [paramCharts, setParamCharts] = useState([]);
 
-  // Ekstrak Spreadsheet ID dari link
+  // Ekstrak ID dari URL Google Sheets
   const extractSpreadsheetId = (url) => {
     const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
     return match ? match[1] : url;
   };
 
   useEffect(() => {
-    fetchGoogleSheetData(activeSheet);
+    if (sheetInput) {
+      fetchGoogleSheetData(activeSheet);
+    }
   }, [activeSheet]);
 
+  // 1. MEMBACA DATA DARI GOOGLE SHEETS LIVE
   const fetchGoogleSheetData = async (sheetName) => {
+    if (!sheetInput) return alert("Masukkan link / ID Google Sheets!");
     setLoading(true);
     try {
       const spreadsheetId = extractSpreadsheetId(sheetInput);
-      // Menggunakan Google Visualization API GViz untuk mengambil JSON per Sheet
       const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(
         sheetName,
       )}`;
@@ -45,16 +47,14 @@ export default function ExcelChartViewer() {
       const res = await fetch(gvizUrl);
       const text = await res.text();
 
-      // Sanitasi respon JSON GViz
       const jsonString = text.substring(
         text.indexOf("{"),
         text.lastIndexOf("}") + 1,
       );
       const data = JSON.parse(jsonString);
 
-      const rows = data.table.rows;
+      const rows = data.table.rows || [];
 
-      // Header Logbook Hermina berada di baris indeks 5 & 6
       const cleanRows = [];
       rows.slice(6).forEach((r) => {
         if (!r.c) return;
@@ -78,67 +78,112 @@ export default function ExcelChartViewer() {
       });
 
       setDataRows(cleanRows);
-
-      // Definisikan Chart Terpisah per Parameter
-      setParamCharts([
-        {
-          title: "Grafik Suhu (°C) - Outlet Kiri",
-          key: "suhuKiri",
-          color: "bg-amber-500",
-        },
-        {
-          title: "Grafik pH - Outlet Kiri",
-          key: "phKiri",
-          color: "bg-emerald-500",
-        },
-        {
-          title: "Grafik TDS - Outlet Kiri",
-          key: "tdsKiri",
-          color: "bg-indigo-500",
-        },
-        {
-          title: "Grafik Debit IPAL (M3)",
-          key: "debitKiri",
-          color: "bg-blue-500",
-        },
-        {
-          title: "Grafik Suhu (°C) - Bak Akhir Kanan",
-          key: "suhuKanan",
-          color: "bg-orange-500",
-        },
-        {
-          title: "Grafik pH - Bak Akhir Kanan",
-          key: "phKanan",
-          color: "bg-teal-500",
-        },
-        {
-          title: "Grafik TDS - Bak Akhir Kanan",
-          key: "tdsKanan",
-          color: "bg-purple-500",
-        },
-      ]);
+      setupCharts();
     } catch (err) {
-      console.error("Gagal memuat Google Sheet:", err);
+      console.error("Gagal membaca Google Sheets:", err);
       alert(
-        "Gagal memuat data sheet. Pastikan Google Sheet diset 'Siapa saja yang memiliki link bisa melihat'",
+        "Gagal membaca Google Sheets. Pastikan akses file diset 'Siapa saja yang memiliki link'",
       );
     } finally {
       setLoading(false);
     }
   };
 
+  // 2. MEMBACA FILE EXCEL MANUALLY (.XLSX)
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const bstr = evt.target.result;
+      const wb = XLSX.read(bstr, { type: "binary" });
+      setSheetNames(wb.SheetNames);
+      if (wb.SheetNames.length > 0) {
+        const firstSheet = wb.SheetNames[0];
+        setActiveSheet(firstSheet);
+        const ws = wb.Sheets[firstSheet];
+        const rawData = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+        const cleanRows = [];
+        rawData.slice(6).forEach((r) => {
+          const tanggalVal = r[0] || r[1] || r[13];
+          if (
+            tanggalVal &&
+            String(tanggalVal).includes("202") &&
+            !String(tanggalVal).toLowerCase().includes("keterangan")
+          ) {
+            cleanRows.push({
+              tanggal: String(tanggalVal),
+              suhuKiri: parseFloat(r[2]) || 0,
+              phKiri: parseFloat(r[3]) || 0,
+              tdsKiri: parseFloat(r[6]) || 0,
+              debitKiri: parseFloat(r[10]) || 0,
+              suhuKanan: parseFloat(r[14]) || 0,
+              phKanan: parseFloat(r[15]) || 0,
+              tdsKanan: parseFloat(r[19]) || 0,
+            });
+          }
+        });
+        setDataRows(cleanRows);
+        setupCharts();
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const setupCharts = () => {
+    setParamCharts([
+      {
+        title: "Grafik Suhu (°C) - Outlet Kiri",
+        key: "suhuKiri",
+        color: "bg-amber-500",
+      },
+      {
+        title: "Grafik pH - Outlet Kiri",
+        key: "phKiri",
+        color: "bg-emerald-500",
+      },
+      {
+        title: "Grafik TDS - Outlet Kiri",
+        key: "tdsKiri",
+        color: "bg-indigo-500",
+      },
+      {
+        title: "Grafik Debit IPAL (M3)",
+        key: "debitKiri",
+        color: "bg-blue-500",
+      },
+      {
+        title: "Grafik Suhu (°C) - Bak Akhir Kanan",
+        key: "suhuKanan",
+        color: "bg-orange-500",
+      },
+      {
+        title: "Grafik pH - Bak Akhir Kanan",
+        key: "phKanan",
+        color: "bg-teal-500",
+      },
+      {
+        title: "Grafik TDS - Bak Akhir Kanan",
+        key: "tdsKanan",
+        color: "bg-purple-500",
+      },
+    ]);
+  };
+
   return (
     <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6 w-full">
-      {/* Header & Link Input */}
+      {/* Header Utama */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
         <div>
           <h3 className="text-lg font-bold text-slate-800 flex items-center">
-            <i className="fa-solid fa-file-excel text-emerald-600 mr-2"></i>{" "}
-            Logbook Air Limbah RS Hermina
+            <i className="fa-solid fa-file-excel text-emerald-600 mr-2.5"></i>{" "}
+            Dashboard Visualisasi Logbook Air Limbah
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Grafik terpisah otomatis per parameter (Suhu, pH, TDS, Debit)
-            berdasarkan Sheet Bulan.
+            Integrasi langsung ke Google Sheets & file Excel dengan diagram
+            terpisah per parameter.
           </p>
         </div>
 
@@ -154,24 +199,39 @@ export default function ExcelChartViewer() {
         </button>
       </div>
 
-      {/* Input Google Sheet Link */}
-      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-        <label className="block text-xs font-semibold text-slate-700">
-          Link Google Sheets:
-        </label>
+      {/* BOX INPUT LINK GOOGLE SHEETS */}
+      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+        <div className="flex justify-between items-center">
+          <label className="text-xs font-bold text-slate-700 flex items-center">
+            <i className="fa-solid fa-link text-blue-600 mr-1.5"></i> Masukkan
+            Link / ID Google Sheets:
+          </label>
+          <div className="flex items-center space-x-2">
+            <span className="text-[11px] text-slate-400">
+              Atau upload manual:
+            </span>
+            <input
+              type="file"
+              accept=".xlsx, .xls, .csv"
+              onChange={handleFileUpload}
+              className="text-xs border border-slate-300 rounded-lg p-1 bg-white cursor-pointer"
+            />
+          </div>
+        </div>
+
         <div className="flex gap-2">
           <input
             type="text"
             value={sheetInput}
             onChange={(e) => setSheetInput(e.target.value)}
-            placeholder="Tempelkan ID / Link Google Sheet..."
-            className="flex-1 text-xs border border-slate-300 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            placeholder="Tempelkan link / ID Google Sheets di sini..."
+            className="flex-1 text-xs border border-slate-300 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
             onClick={() => fetchGoogleSheetData(activeSheet)}
-            className="bg-blue-600 text-white text-xs px-4 py-2 rounded-xl font-semibold hover:bg-blue-700"
+            className="bg-blue-600 text-white text-xs px-4 py-2 rounded-xl font-semibold hover:bg-blue-700 transition"
           >
-            Hubungkan
+            Hubungkan Data
           </button>
         </div>
       </div>
@@ -183,13 +243,13 @@ export default function ExcelChartViewer() {
           Pilih Sheet Bulan:
         </label>
         <div className="flex flex-wrap gap-1.5">
-          {months.map((m) => (
+          {sheetNames.map((m) => (
             <button
               key={m}
               onClick={() => setActiveSheet(m)}
               className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition ${
                 activeSheet === m
-                  ? "bg-blue-600 text-white shadow-sm"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-200"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >
@@ -199,7 +259,7 @@ export default function ExcelChartViewer() {
         </div>
       </div>
 
-      {/* DIAGRAM GRAFIK TERPISAH PER PARAMETER */}
+      {/* TAMPILAN DIAGRAM GRAFIK TERPISAH PER PARAMETER */}
       {dataRows.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
           {paramCharts.map((chart, idx) => {
@@ -253,8 +313,9 @@ export default function ExcelChartViewer() {
         </div>
       ) : (
         <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
+          <i className="fa-solid fa-spinner animate-spin text-2xl text-blue-600 mb-2 block"></i>
           <p className="text-sm font-semibold text-slate-600">
-            Sedang memuat atau data tidak ditemukan...
+            Sedang mengambil data dari Google Sheets...
           </p>
         </div>
       )}
