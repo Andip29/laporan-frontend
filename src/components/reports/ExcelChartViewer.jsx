@@ -108,7 +108,19 @@ export default function ExcelChartViewer() {
         if (!rawDate) return;
 
         const dateStr = parseExcelDate(rawDate);
-        if (!dateStr || dateStr.toLowerCase().includes("keterangan")) return;
+        const lowerDate = String(rawDate).toLowerCase();
+
+        // ABAIKAN BARIS HEADER (Lokasi, Bulan, Area, Keterangan, Tanggal)
+        if (
+          !dateStr ||
+          lowerDate.includes("lokasi") ||
+          lowerDate.includes("bulan") ||
+          lowerDate.includes("area") ||
+          lowerDate.includes("keterangan") ||
+          lowerDate.includes("tanggal")
+        ) {
+          return;
+        }
 
         parsedData.push({
           tanggal: dateStr,
