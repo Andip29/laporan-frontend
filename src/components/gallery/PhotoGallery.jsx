@@ -9,7 +9,6 @@ export default function PhotoGallery() {
   const [uploading, setUploading] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
 
-  // Ambil token JWT dari localStorage
   const getAuthHeader = () => {
     const token = localStorage.getItem("token");
     return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
@@ -21,33 +20,53 @@ export default function PhotoGallery() {
 
   const fetchPhotos = async () => {
     try {
-      // Mengirimkan token agar tidak dikira Unauthorized (401)
-      const resReports = await axios.get(
-        `${API_BASE}/reports`,
-        getAuthHeader(),
-      );
+      const auth = getAuthHeader();
       const allPhotos = [];
 
-      resReports.data.forEach((r) => {
-        if (r.image_urls) {
-          // Parsing jika image_urls berbentuk string JSON
-          const urls =
-            typeof r.image_urls === "string"
-              ? JSON.parse(r.image_urls)
-              : r.image_urls;
-          if (Array.isArray(urls)) {
-            urls.forEach((url) =>
-              allPhotos.push({
-                id: `report-${r.id}-${url}`,
-                url,
-                source: `Laporan #${r.id} (${r.submitted_by || "User"})`,
-                date: r.created_at,
-              }),
-            );
+      // 1. Ambil foto dari Laporan
+      try {
+        const resReports = await axios.get(`${API_BASE}/reports`, auth);
+        resReports.data.forEach((r) => {
+          if (r.image_urls) {
+            const urls =
+              typeof r.image_urls === "string"
+                ? JSON.parse(r.image_urls)
+                : r.image_urls;
+            if (Array.isArray(urls)) {
+              urls.forEach((url) =>
+                allPhotos.push({
+                  id: `report-${r.id}-${url}`,
+                  url,
+                  source: `Laporan #${r.id} (${r.submitted_by || "User"})`,
+                  date: r.created_at,
+                }),
+              );
+            }
           }
-        }
-      });
+        });
+      } catch (err) {
+        console.error("Gagal mengambil laporan foto:", err);
+      }
 
+      // 2. Ambil foto galeri tersimpan dari Database
+      try {
+        const resGaleri = await axios.get(`${API_BASE}/upload`, auth);
+        if (Array.isArray(resGaleri.data)) {
+          resGaleri.data.forEach((g) => {
+            allPhotos.push({
+              id: `galeri-${g.id}`,
+              url: g.file_url,
+              source: `Foto Upload (${g.original_name || "Dokumentasi"})`,
+              date: g.created_at,
+            });
+          });
+        }
+      } catch (err) {
+        console.error("Gagal mengambil galeri tersimpan:", err);
+      }
+
+      // Urutkan foto dari yang terbaru
+      allPhotos.sort((a, b) => new Date(b.date) - new Date(a.date));
       setPhotos(allPhotos);
     } catch (e) {
       console.error("Gagal mengambil galeri foto:", e);
@@ -59,11 +78,10 @@ export default function PhotoGallery() {
     if (files.length === 0) return;
 
     const formData = new FormData();
-    files.forEach((f) => formData.append("photos", f)); // Dikirim dengan field 'photos'
+    files.forEach((f) => formData.append("photos", f));
 
     setUploading(true);
     try {
-      // Mengirimkan token dan header multipart
       const config = {
         headers: {
           ...getAuthHeader().headers,
@@ -71,30 +89,14 @@ export default function PhotoGallery() {
         },
       };
 
-      const resUpload = await axios.post(
-        `${API_BASE}/upload`,
-        formData,
-        config,
-      );
+      await axios.post(`${API_BASE}/upload`, formData, config);
+      alert("Foto dokumentasi berhasil diunggah dan disimpan!");
 
-      // Mendukung array imageUrls maupun url tunggal dari backend
-      const uploadedUrls = resUpload.data.imageUrls || [resUpload.data.url];
-
-      const newPhotoObjects = uploadedUrls.map((url) => ({
-        id: `upload-${Date.now()}-${url}`,
-        url,
-        source: "Upload Langsung Galeri",
-        date: new Date().toISOString(),
-      }));
-
-      setPhotos((prev) => [...newPhotoObjects, ...prev]);
-      alert("Foto dokumentasi berhasil diunggah!");
+      // Refresh ulang data agar foto baru muncul & tersimpan permanen
+      fetchPhotos();
     } catch (err) {
       console.error("Error upload:", err.response?.data || err.message);
-      alert(
-        err.response?.data?.error ||
-          "Gagal mengunggah foto. Pastikan server backend aktif!",
-      );
+      alert(err.response?.data?.error || "Gagal mengunggah foto.");
     } finally {
       setUploading(false);
     }
@@ -162,12 +164,56 @@ export default function PhotoGallery() {
                     {p.source}
                   </p>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    {new Date(p.date).toLocaleDateString("id-ID")}
+                    {p.date
+                      ? new Date(p.date).toLocaleDateString("id-ID")
+                      : "-"}
                   </p>
                 </div>
+                <button
+                  onClick={() => setSelectedPhoto(p)}
+                  className="text-blue-600 hover:text-blue-800 font-semibold text-xs"
+                >
+                  Lihat
+                </button>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal Preview Foto untuk Membuka & Melihat Foto Lengkap */}
+      {selectedPhoto && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="relative max-w-4xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl">
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-sm">{selectedPhoto.source}</h3>
+                <p className="text-xs text-slate-400">
+                  {selectedPhoto.date
+                    ? new Date(selectedPhoto.date).toLocaleString("id-ID")
+                    : ""}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedPhoto(null)}
+                className="text-slate-400 hover:text-white text-xl font-bold px-3 py-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-2 flex items-center justify-center bg-slate-950 max-h-[80vh] overflow-auto">
+              <img
+                src={
+                  selectedPhoto.url?.startsWith("http") ||
+                  selectedPhoto.url?.startsWith("data:")
+                    ? selectedPhoto.url
+                    : `${BACKEND_URL}${selectedPhoto.url}`
+                }
+                alt="preview"
+                className="max-h-[75vh] w-auto object-contain rounded-lg"
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
