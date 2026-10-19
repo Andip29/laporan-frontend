@@ -22,12 +22,11 @@ export default function ExcelChartViewer() {
   const [dataRows, setDataRows] = useState([]);
   const [paramCharts, setParamCharts] = useState([]);
 
-  // 1. Konversi Seri Angka Tanggal Excel (46027) ke Format Tanggal "DD-MM"
+  // 1. Format Tanggal
   const parseExcelDate = (val) => {
     if (!val) return "";
     const str = String(val).trim();
 
-    // Jika bernilai angka serial Excel (seperti 46027 / 46027.0000)
     const num = parseFloat(str);
     if (!isNaN(num) && num > 40000 && num < 60000) {
       const dateObj = XLSX.SSF.parse_date_code(num);
@@ -38,31 +37,21 @@ export default function ExcelChartViewer() {
       }
     }
 
-    // Jika string tanggal biasa
     if (str.length >= 5) return str.slice(0, 5);
     return str;
   };
 
-  // 2. Koreksi Nilai Suhu (275 -> 27.5)
-  const parseSuhu = (val) => {
-    let num = parseFloat(String(val).replace(",", "."));
-    if (isNaN(num)) return 0;
-    if (num > 100) num = num / 10; // 275 -> 27.5
-    return parseFloat(num.toFixed(1));
-  };
-
-  // 3. Koreksi Nilai pH (742 -> 7.42)
+  // 2. Koreksi pH (misal: 764 -> 7.64 atau 7,64 -> 7.64)
   const parsePH = (val) => {
     let num = parseFloat(String(val).replace(",", "."));
     if (isNaN(num)) return 0;
-    if (num > 100)
-      num = num / 100; // 742 -> 7.42
-    else if (num > 20) num = num / 10; // 74 -> 7.4
+    if (num > 100) num = num / 100;
+    else if (num > 20) num = num / 10;
     return parseFloat(num.toFixed(2));
   };
 
-  // 4. Clean Angka Normal
-  const parseNormalNum = (val) => {
+  // 3. Clean Angka Normal (Debit)
+  const parseDebit = (val) => {
     const num = parseFloat(String(val).replace(",", "."));
     return isNaN(num) ? 0 : num;
   };
@@ -110,7 +99,7 @@ export default function ExcelChartViewer() {
         const dateStr = parseExcelDate(rawDate);
         const lowerDate = String(rawDate).toLowerCase();
 
-        // ABAIKAN BARIS HEADER (Lokasi, Bulan, Area, Keterangan, Tanggal)
+        // FILTER DENGAN KETAT: Abaikan header (Lokasi, Bulan, Area, Keterangan, Tanggal)
         if (
           !dateStr ||
           lowerDate.includes("lokasi") ||
@@ -124,10 +113,13 @@ export default function ExcelChartViewer() {
 
         parsedData.push({
           tanggal: dateStr,
-          suhuKiri: parseSuhu(row[1]), // Suhu Outlet I
-          phKiri: parsePH(row[2]), // pH Outlet I
-          tdsKiri: parseNormalNum(row[6]), // TDS Outlet I
-          selisihKiri: parseNormalNum(row[11]), // Selisih Debit Outlet I
+          // OUTLET 1
+          phOutlet1: parsePH(row[2]), // Kolom C: pH Outlet I
+          debitOutlet1: parseDebit(row[11]), // Kolom L: Selisih Debit Outlet I
+
+          // OUTLET 2
+          phOutlet2: parsePH(row[15]), // Kolom P: pH Outlet II
+          debitOutlet2: parseDebit(row[22]), // Kolom W: Selisih Debit Outlet II
         });
       });
 
@@ -144,40 +136,35 @@ export default function ExcelChartViewer() {
   const setupCharts = () => {
     setParamCharts([
       {
-        title: "Grafik Suhu (°C) - Outlet I",
-        key: "suhuKiri",
-        type: "suhu",
-        minSafe: 25,
-        maxSafe: 38,
-      },
-      {
         title: "Grafik pH - Outlet I",
-        key: "phKiri",
+        key: "phOutlet1",
         type: "ph",
         minSafe: 6,
         maxSafe: 9,
       },
       {
-        title: "Grafik TDS - Outlet I",
-        key: "tdsKiri",
-        type: "normal",
-        color: "bg-indigo-500",
+        title: "Grafik Selisih Debit (M3) - Outlet I",
+        key: "debitOutlet1",
+        type: "debit",
+        color: "bg-blue-500",
       },
       {
-        title: "Grafik Selisih Debit (M3) - Outlet I",
-        key: "selisihKiri",
-        type: "normal",
-        color: "bg-blue-500",
+        title: "Grafik pH - Outlet II",
+        key: "phOutlet2",
+        type: "ph",
+        minSafe: 6,
+        maxSafe: 9,
+      },
+      {
+        title: "Grafik Selisih Debit (M3) - Outlet II",
+        key: "debitOutlet2",
+        type: "debit",
+        color: "bg-teal-500",
       },
     ]);
   };
 
   const getBarColor = (val, chart) => {
-    if (chart.type === "suhu") {
-      return val >= 25 && val <= 38
-        ? "bg-amber-500"
-        : "bg-rose-600 animate-pulse";
-    }
     if (chart.type === "ph") {
       return val >= 6 && val <= 9
         ? "bg-emerald-500"
@@ -193,10 +180,11 @@ export default function ExcelChartViewer() {
         <div>
           <h3 className="text-lg font-bold text-slate-800 flex items-center">
             <i className="fa-solid fa-file-excel text-emerald-600 mr-2.5"></i>{" "}
-            Logbook Air Limbah RS Hermina Karawang
+            Visualisasi pH & Debit (Outlet I & Outlet II)
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Visualisasi akurat angka desimal (Suhu & pH) serta tanggal otomatis.
+            Menampilkan data grafik pH dan Debit IPAL harian untuk Outlet 1 dan
+            Outlet 2.
           </p>
         </div>
 
@@ -258,7 +246,7 @@ export default function ExcelChartViewer() {
         </div>
       </div>
 
-      {/* TAMPILAN GRAFIK HASIL KOREKSI DESIMAL DAN TANGGAL */}
+      {/* TAMPILAN GRAFIK 4 PARAMETER (pH & Debit Outlet I & II) */}
       {dataRows.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
           {paramCharts.map((chart, idx) => {
@@ -295,17 +283,18 @@ export default function ExcelChartViewer() {
                           key={rIdx}
                           className="flex flex-col items-center flex-1 h-full justify-end min-w-[28px]"
                         >
-                          {/* Angka Presisi (misal: 27.5 atau 7.42) */}
+                          {/* Angka Nilai */}
                           <span className="text-[10px] font-extrabold text-cyan-300 mb-1">
                             {val}
                           </span>
 
+                          {/* Batang Grafik */}
                           <div
                             style={{ height: `${Math.max(heightPct, 6)}%` }}
                             className={`w-full ${barBg} rounded-t-md transition-all duration-300 relative flex justify-center`}
                           ></div>
 
-                          {/* Tanggal Teks Asli (misal: 01-01, 02-01) */}
+                          {/* Tanggal */}
                           <span className="text-[9px] font-semibold text-slate-300 mt-2 -rotate-45 transform origin-top-left whitespace-nowrap">
                             {row.tanggal}
                           </span>
@@ -322,7 +311,7 @@ export default function ExcelChartViewer() {
         <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
           <i className="fa-solid fa-spinner animate-spin text-2xl text-blue-600 mb-2 block"></i>
           <p className="text-sm font-semibold text-slate-600">
-            Sedang menyelaraskan data desimal dan tanggal...
+            Sedang memuat data pH & Debit Outlet I dan II...
           </p>
         </div>
       )}
