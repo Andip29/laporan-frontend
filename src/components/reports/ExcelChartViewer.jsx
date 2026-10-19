@@ -5,7 +5,7 @@ export default function ExcelChartViewer() {
   const [sheetInput, setSheetInput] = useState(
     "1Catq1SEdWG61MdY6TVPB2bO1Wk-JYdNxZV2eiW_cX8I",
   );
-  const [sheetNames, setSheetNames] = useState([
+  const [sheetNames] = useState([
     "Januari 2026",
     "Februari 2026",
     "Maret 2026",
@@ -22,40 +22,20 @@ export default function ExcelChartViewer() {
   const [dataRows, setDataRows] = useState([]);
   const [paramCharts, setParamCharts] = useState([]);
 
-  // 1. Mengubah Koma (,) ke Titik (.) dan Konversi ke Angka Desimal Presisi
-  const parseNumberWithComma = (val) => {
+  // Fungsi mengubah string bernilai koma (seperti '25,4') menjadi angka float (25.4)
+  const cleanNumber = (val) => {
     if (val === null || val === undefined || val === "") return 0;
     if (typeof val === "number") return val;
-
-    let str = String(val).trim();
-    if (str.startsWith("Date(")) return 0;
-
-    // Ganti koma dengan titik untuk desimal
-    str = str.replace(",", ".");
+    let str = String(val).trim().replace(",", ".");
     const num = parseFloat(str);
     return isNaN(num) ? 0 : num;
   };
 
-  // 2. Format Tanggal dari Respon GViz Google Sheets
-  const parseGVizDate = (val) => {
-    if (!val) return "";
-    const str = String(val);
-    if (str.startsWith("Date(")) {
-      const parts = str.replace("Date(", "").replace(")", "").split(",");
-      if (parts.length >= 3) {
-        const month = String(parseInt(parts[1]) + 1).padStart(2, "0");
-        const day = String(parts[2]).padStart(2, "0");
-        return `${month}-${day}`;
-      }
-    }
-    return str.slice(0, 10);
-  };
-
-  // 3. Parsing Simbol Aliran (+ = 1, - = 0)
-  const parseAliran = (val) => {
+  // Fungsi mendeteksi aliran '+' (1) atau '-' (0)
+  const cleanAliran = (val) => {
     if (!val) return 0;
     const str = String(val).trim();
-    return str === "+" || str === "(+)" ? 1 : 0;
+    return str.includes("+") ? 1 : 0;
   };
 
   const extractSpreadsheetId = (url) => {
@@ -69,120 +49,87 @@ export default function ExcelChartViewer() {
     }
   }, [activeSheet]);
 
-  // BACA DATA GOOGLE SHEETS LIVE
   const fetchGoogleSheetData = async (sheetName) => {
-    if (!sheetInput) return alert("Silakan masukkan link / ID Google Sheets!");
+    if (!sheetInput) return alert("Silakan masukkan link Google Sheets!");
     setLoading(true);
+
     try {
       const spreadsheetId = extractSpreadsheetId(sheetInput);
-      const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(
+
+      // Ambil format CSV langsung dari Google Sheets agar struktur kolom presisi
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
         sheetName,
       )}`;
 
-      const res = await fetch(gvizUrl);
-      const text = await res.text();
+      const res = await fetch(csvUrl);
+      const csvText = await res.text();
 
-      const jsonString = text.substring(
-        text.indexOf("{"),
-        text.lastIndexOf("}") + 1,
+      // Parse CSV menggunakan XLSX
+      const workbook = XLSX.read(csvText, { type: "string" });
+      const firstSheetName = workbook.SheetNames[0];
+      const rawData = XLSX.utils.sheet_to_json(
+        workbook.Sheets[firstSheetName],
+        {
+          header: 1,
+          defval: "",
+        },
       );
-      const data = JSON.parse(jsonString);
 
-      const rows = data.table.rows || [];
-
-      const cleanRows = [];
-      // Data Harian Dimulai dari Baris Ke-6 (Indeks Array 5)
-      rows.slice(5).forEach((r) => {
-        if (!r.c) return;
-
-        // Ambil Tanggal (Kolom A / Index 0)
-        const rawDate = r.c[0]?.f || r.c[0]?.v;
-        if (!rawDate) return;
-
-        const formattedDate = parseGVizDate(rawDate);
+      // Cari baris tempat tanggal dimulai (Baris yang memuat teks "02-" atau tanggal)
+      let startRowIndex = -1;
+      for (let i = 0; i < rawData.length; i++) {
+        const firstCell = String(rawData[i][0] || "").trim();
         if (
-          !formattedDate ||
-          formattedDate.toLowerCase().includes("keterangan")
-        )
-          return;
+          firstCell.match(/^\d{2}-\d{2}-\d{4}/) ||
+          firstCell.match(/^\d{1,2}\/\d{1,2}/)
+        ) {
+          startRowIndex = i;
+          break;
+        }
+      }
 
-        cleanRows.push({
-          tanggal: formattedDate,
-          // OUTLET I (KIRI)
-          suhuKiri: parseNumberWithComma(r.c[1]?.v ?? r.c[1]?.f), // Kolom B: Suhu
-          phKiri: parseNumberWithComma(r.c[2]?.v ?? r.c[2]?.f), // Kolom C: pH
-          aliranKiri: parseAliran(r.c[3]?.v ?? r.c[3]?.f), // Kolom D: Aliran (+/-)
-          tdsKiri: parseNumberWithComma(r.c[6]?.v ?? r.c[6]?.f), // Kolom G: TDS
-          usiaIkan: parseNumberWithComma(r.c[9]?.v ?? r.c[9]?.f), // Kolom J: Usia Ikan
-          debitKiri: parseNumberWithComma(r.c[10]?.v ?? r.c[10]?.f), // Kolom K: Meter Debit
-          selisihKiri: parseNumberWithComma(r.c[11]?.v ?? r.c[11]?.f), // Kolom L: Selisih M3
+      if (startRowIndex === -1) startRowIndex = 5; // Default baris ke-6
 
-          // OUTLET II (KANAN)
-          suhuKanan: parseNumberWithComma(r.c[14]?.v ?? r.c[14]?.f), // Kolom O: Suhu Kanan
-          phKanan: parseNumberWithComma(r.c[15]?.v ?? r.c[15]?.f), // Kolom P: pH Kanan
-          aliranKanan: parseAliran(r.c[16]?.v ?? r.c[16]?.f), // Kolom Q: Aliran Kanan
-          tdsKanan: parseNumberWithComma(r.c[19]?.v ?? r.c[19]?.f), // Kolom T: TDS Kanan
-          selisihKanan: parseNumberWithComma(r.c[22]?.v ?? r.c[22]?.f), // Kolom W: Selisih M3 Kanan
+      const parsedData = [];
+      for (let i = startRowIndex; i < rawData.length; i++) {
+        const row = rawData[i];
+        const tanggalCell = String(row[0] || "").trim();
+
+        // Stop jika menemukan baris Keterangan / Tanda Tangan
+        if (!tanggalCell || tanggalCell.toLowerCase().includes("keterangan")) {
+          break;
+        }
+
+        parsedData.push({
+          tanggal: tanggalCell.slice(0, 10),
+          // Outlet I (Kiri)
+          suhuKiri: cleanNumber(row[1]), // Kolom B
+          phKiri: cleanNumber(row[2]), // Kolom C
+          aliranKiri: cleanAliran(row[3]), // Kolom D
+          tdsKiri: cleanNumber(row[6]), // Kolom G
+          usiaIkan: cleanNumber(row[9]), // Kolom J
+          debitKiri: cleanNumber(row[10]), // Kolom K
+          selisihKiri: cleanNumber(row[11]), // Kolom L
+
+          // Outlet II (Kanan)
+          suhuKanan: cleanNumber(row[14]), // Kolom O
+          phKanan: cleanNumber(row[15]), // Kolom P
+          aliranKanan: cleanAliran(row[16]), // Kolom Q
+          tdsKanan: cleanNumber(row[19]), // Kolom T
+          selisihKanan: cleanNumber(row[22]), // Kolom W
         });
-      });
+      }
 
-      setDataRows(cleanRows);
+      setDataRows(parsedData);
       setupCharts();
     } catch (err) {
       console.error("Gagal membaca Google Sheets:", err);
       alert(
-        "Gagal membaca Google Sheets. Pastikan akses file diset 'Siapa saja yang memiliki link'",
+        "Gagal memuat data. Pastikan Google Sheet diatur ke 'Siapa saja yang memiliki link'",
       );
     } finally {
       setLoading(false);
     }
-  };
-
-  // BACA FILE EXCEL MANUALLY (.XLSX)
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const bstr = evt.target.result;
-      const wb = XLSX.read(bstr, { type: "binary" });
-      setSheetNames(wb.SheetNames);
-      if (wb.SheetNames.length > 0) {
-        const firstSheet = wb.SheetNames[0];
-        setActiveSheet(firstSheet);
-        const ws = wb.Sheets[firstSheet];
-        const rawData = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-
-        const cleanRows = [];
-        rawData.slice(5).forEach((r) => {
-          const tanggalVal = r[0];
-          if (
-            tanggalVal &&
-            !String(tanggalVal).toLowerCase().includes("keterangan")
-          ) {
-            cleanRows.push({
-              tanggal: String(tanggalVal).slice(0, 10),
-              suhuKiri: parseNumberWithComma(r[1]),
-              phKiri: parseNumberWithComma(r[2]),
-              aliranKiri: parseAliran(r[3]),
-              tdsKiri: parseNumberWithComma(r[6]),
-              usiaIkan: parseNumberWithComma(r[9]),
-              debitKiri: parseNumberWithComma(r[10]),
-              selisihKiri: parseNumberWithComma(r[11]),
-              suhuKanan: parseNumberWithComma(r[14]),
-              phKanan: parseNumberWithComma(r[15]),
-              aliranKanan: parseAliran(r[16]),
-              tdsKanan: parseNumberWithComma(r[19]),
-              selisihKanan: parseNumberWithComma(r[22]),
-            });
-          }
-        });
-        setDataRows(cleanRows);
-        setupCharts();
-      }
-    };
-    reader.readAsBinaryString(file);
   };
 
   const setupCharts = () => {
@@ -264,7 +211,7 @@ export default function ExcelChartViewer() {
 
   return (
     <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6 w-full">
-      {/* Header Utama */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
         <div>
           <h3 className="text-lg font-bold text-slate-800 flex items-center">
@@ -272,8 +219,7 @@ export default function ExcelChartViewer() {
             Logbook Air Limbah RS Hermina Karawang
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Visualisasi data presisi membaca angka desimal koma (,) dan tanggal
-            dari Google Sheets.
+            Membaca data CSV secara presisi dari Google Sheets.
           </p>
         </div>
 
@@ -289,26 +235,12 @@ export default function ExcelChartViewer() {
         </button>
       </div>
 
-      {/* Input Link Google Sheets */}
+      {/* Input Google Sheets */}
       <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-        <div className="flex justify-between items-center">
-          <label className="text-xs font-bold text-slate-700 flex items-center">
-            <i className="fa-solid fa-link text-blue-600 mr-1.5"></i> Link / ID
-            Google Sheets:
-          </label>
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] text-slate-400">
-              Atau upload file:
-            </span>
-            <input
-              type="file"
-              accept=".xlsx, .xls, .csv"
-              onChange={handleFileUpload}
-              className="text-xs border border-slate-300 rounded-lg p-1 bg-white cursor-pointer"
-            />
-          </div>
-        </div>
-
+        <label className="text-xs font-bold text-slate-700 flex items-center">
+          <i className="fa-solid fa-link text-blue-600 mr-1.5"></i> Link / ID
+          Google Sheets:
+        </label>
         <div className="flex gap-2">
           <input
             type="text"
@@ -349,7 +281,7 @@ export default function ExcelChartViewer() {
         </div>
       </div>
 
-      {/* TAMPILAN GRAFIK DENGAN ANGKAS ASLI DAN TANGGAL AKURAT */}
+      {/* TAMPILAN GRAFIK */}
       {dataRows.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
           {paramCharts.map((chart, idx) => {
@@ -386,18 +318,15 @@ export default function ExcelChartViewer() {
                           key={rIdx}
                           className="flex flex-col items-center flex-1 h-full justify-end min-w-[28px]"
                         >
-                          {/* Angka Nilai Tampil Tepat (25.4, 7.23, 378, dll) */}
                           <span className="text-[10px] font-extrabold text-cyan-300 mb-1">
                             {val}
                           </span>
 
-                          {/* Batang Grafik */}
                           <div
                             style={{ height: `${Math.max(heightPct, 6)}%` }}
                             className={`w-full ${barBg} rounded-t-md transition-all duration-300 relative flex justify-center`}
                           ></div>
 
-                          {/* Tanggal Terbaca Jelas (02-01, 02-02, dst) */}
                           <span className="text-[9px] font-semibold text-slate-300 mt-2 -rotate-45 transform origin-top-left whitespace-nowrap">
                             {row.tanggal}
                           </span>
@@ -414,7 +343,7 @@ export default function ExcelChartViewer() {
         <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
           <i className="fa-solid fa-spinner animate-spin text-2xl text-blue-600 mb-2 block"></i>
           <p className="text-sm font-semibold text-slate-600">
-            Sedang menyelaraskan data dengan Google Sheets...
+            Menyambungkan dan membaca CSV Google Sheets...
           </p>
         </div>
       )}
