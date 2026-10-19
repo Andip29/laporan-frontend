@@ -2,9 +2,8 @@ import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 
 export default function ExcelChartViewer() {
-  const [sheetInput, setSheetInput] = useState(
-    "1Catq1SEdWG61MdY6TVPB2bO1Wk-JYdNxZV2eiW_cX8I",
-  );
+  // Biarkan kosong agar tidak membaca data apa pun sebelum dihubungkan
+  const [sheetInput, setSheetInput] = useState("");
   const [sheetNames, setSheetNames] = useState([
     "Januari 2026",
     "Februari 2026",
@@ -22,7 +21,6 @@ export default function ExcelChartViewer() {
   const [dataRows, setDataRows] = useState([]);
   const [paramCharts, setParamCharts] = useState([]);
 
-  // Ekstrak ID dari URL Google Sheets
   const extractSpreadsheetId = (url) => {
     const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
     return match ? match[1] : url;
@@ -34,9 +32,9 @@ export default function ExcelChartViewer() {
     }
   }, [activeSheet]);
 
-  // 1. MEMBACA DATA DARI GOOGLE SHEETS LIVE
   const fetchGoogleSheetData = async (sheetName) => {
-    if (!sheetInput) return alert("Masukkan link / ID Google Sheets!");
+    if (!sheetInput)
+      return alert("Silakan masukkan link / ID Google Sheets terlebih dahulu!");
     setLoading(true);
     try {
       const spreadsheetId = extractSpreadsheetId(sheetInput);
@@ -89,7 +87,6 @@ export default function ExcelChartViewer() {
     }
   };
 
-  // 2. MEMBACA FILE EXCEL MANUALLY (.XLSX)
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -174,7 +171,6 @@ export default function ExcelChartViewer() {
 
   return (
     <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6 w-full">
-      {/* Header Utama */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
         <div>
           <h3 className="text-lg font-bold text-slate-800 flex items-center">
@@ -189,8 +185,8 @@ export default function ExcelChartViewer() {
 
         <button
           onClick={() => fetchGoogleSheetData(activeSheet)}
-          disabled={loading}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-sm flex items-center"
+          disabled={loading || !sheetInput}
+          className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-sm flex items-center"
         >
           <i
             className={`fa-solid fa-rotate mr-2 ${loading ? "animate-spin" : ""}`}
@@ -199,7 +195,6 @@ export default function ExcelChartViewer() {
         </button>
       </div>
 
-      {/* BOX INPUT LINK GOOGLE SHEETS */}
       <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
         <div className="flex justify-between items-center">
           <label className="text-xs font-bold text-slate-700 flex items-center">
@@ -236,30 +231,30 @@ export default function ExcelChartViewer() {
         </div>
       </div>
 
-      {/* PILIHAN TAB SHEET BULAN */}
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-          <i className="fa-solid fa-calendar-days mr-1.5 text-blue-600"></i>{" "}
-          Pilih Sheet Bulan:
-        </label>
-        <div className="flex flex-wrap gap-1.5">
-          {sheetNames.map((m) => (
-            <button
-              key={m}
-              onClick={() => setActiveSheet(m)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition ${
-                activeSheet === m
-                  ? "bg-blue-600 text-white shadow-md shadow-blue-200"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              {m}
-            </button>
-          ))}
+      {sheetInput && (
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+            <i className="fa-solid fa-calendar-days mr-1.5 text-blue-600"></i>{" "}
+            Pilih Sheet Bulan:
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {sheetNames.map((m) => (
+              <button
+                key={m}
+                onClick={() => setActiveSheet(m)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition ${
+                  activeSheet === m
+                    ? "bg-blue-600 text-white shadow-md shadow-blue-200"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* TAMPILAN DIAGRAM GRAFIK TERPISAH PER PARAMETER */}
       {dataRows.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
           {paramCharts.map((chart, idx) => {
@@ -313,9 +308,13 @@ export default function ExcelChartViewer() {
         </div>
       ) : (
         <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
-          <i className="fa-solid fa-spinner animate-spin text-2xl text-blue-600 mb-2 block"></i>
+          <i className="fa-solid fa-link text-3xl text-slate-300 mb-2 block"></i>
           <p className="text-sm font-semibold text-slate-600">
-            Sedang mengambil data dari Google Sheets...
+            Belum Ada Google Sheets Terhubung
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            Tempelkan link Google Sheets Anda di atas lalu klik{" "}
+            <strong>Hubungkan Data</strong> untuk menampilkan grafik.
           </p>
         </div>
       )}
