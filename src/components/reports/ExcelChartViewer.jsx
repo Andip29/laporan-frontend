@@ -1,14 +1,13 @@
-import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
+import React, { useState } from "react";
+import * as XLSX from "xlsx";
 
-const ExcelChartViewer = ({ onDataParsed }) => {
+export default function ExcelChartViewer() {
   const [chartData, setChartData] = useState([]);
-  const [keys, setKeys] = useState([]);
-  const [xAxisKey, setXAxisKey] = useState('');
-  const [dataKey, setDataKey] = useState('');
-  const [chartType, setChartType] = useState('bar');
+  const [selectedColumn, setSelectedColumn] = useState("");
+  const [numericColumns, setNumericColumns] = useState([]);
+  const [chartType, setChartType] = useState("line");
 
+  // Handler Unggah & Parse File Excel/Logbook
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -16,83 +15,150 @@ const ExcelChartViewer = ({ onDataParsed }) => {
     const reader = new FileReader();
     reader.onload = (evt) => {
       const bstr = evt.target.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
-      const wsname = wb.SheetNames[0];
-      const ws = wb.Sheets[wsname];
-      const data = XLSX.utils.sheet_to_json(ws);
+      const wb = XLSX.read(bstr, { type: "binary" });
 
-      if (data.length > 0) {
-        const headers = Object.keys(data[0]);
-        setKeys(headers);
-        setXAxisKey(headers[0]); // Sumbu X default kolom pertama
-        setDataKey(headers[1] || headers[0]); // Sumbu Y default kolom kedua
-        setChartData(data);
-        if (onDataParsed) onDataParsed(data, file);
+      // Ambil sheet pertama
+      const wsName = wb.SheetNames[0];
+      const ws = wb.Sheets[wsName];
+
+      // Convert sheet ke JSON
+      const dataJson = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+      if (dataJson.length === 0) return alert("File Excel kosong!");
+
+      // Filter nama kolom yang berisi angka untuk opsi grafik
+      const keys = Object.keys(dataJson[0]);
+      const validNumCols = keys.filter((key) => {
+        return dataJson.some((row) => !isNaN(parseFloat(row[key])));
+      });
+
+      setNumericColumns(validNumCols);
+      if (validNumCols.length > 0) {
+        setSelectedColumn(validNumCols[validNumCols.length - 1]); // Default pilih kolom selisih/debit
       }
+
+      setChartData(dataJson);
     };
     reader.readAsBinaryString(file);
   };
 
+  // Mencari nilai maksimum untuk skala grafik
+  const maxVal = Math.max(
+    ...chartData.map((d) => parseFloat(d[selectedColumn]) || 0),
+    10,
+  );
+
   return (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mt-4">
-      <h3 className="font-semibold text-slate-800 mb-3">📊 Import File Excel / CSV & Generate Grafik</h3>
-      
-      <input 
-        type="file" 
-        accept=".xlsx, .xls, .csv" 
-        onChange={handleFileUpload}
-        className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-      />
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h3 className="text-lg font-bold text-slate-800 flex items-center">
+            <i className="fa-solid fa-chart-line text-blue-600 mr-2"></i>{" "}
+            Visualisasi Logbook Air Limbah
+          </h3>
+          <p className="text-xs text-slate-500">
+            Unggah logbook Excel (misal: Logbook Air Limbah Harian) untuk
+            melihat grafik parameter otomatis.
+          </p>
+        </div>
 
+        {/* Input File Excel */}
+        <input
+          type="file"
+          accept=".xlsx, .xls, .csv"
+          onChange={handleFileUpload}
+          className="text-xs border border-slate-300 rounded-xl p-2 bg-slate-50 cursor-pointer"
+        />
+      </div>
+
+      {/* Kontrol Pilihan Parameter/Kolom & Jenis Grafik */}
       {chartData.length > 0 && (
-        <div className="mt-5 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Sumbu X (Kategori/Tanggal):</label>
-              <select value={xAxisKey} onChange={(e) => setXAxisKey(e.target.value)} className="w-full p-2 border rounded-lg text-sm">
-                {keys.map((k) => <option key={k} value={k}>{k}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Sumbu Y (Nilai/Jumlah):</label>
-              <select value={dataKey} onChange={(e) => setDataKey(e.target.value)} className="w-full p-2 border rounded-lg text-sm">
-                {keys.map((k) => <option key={k} value={k}>{k}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Tipe Grafik:</label>
-              <select value={chartType} onChange={(e) => setChartType(e.target.value)} className="w-full p-2 border rounded-lg text-sm">
-                <option value="bar">Grafik Batang (Bar)</option>
-                <option value="line">Grafik Garis (Line)</option>
-              </select>
-            </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-100 p-3 rounded-xl">
+          <div className="flex items-center space-x-2">
+            <label className="text-xs font-semibold text-slate-600">
+              Pilih Parameter Grafik:
+            </label>
+            <select
+              value={selectedColumn}
+              onChange={(e) => setSelectedColumn(e.target.value)}
+              className="text-xs font-bold bg-white border border-slate-300 rounded-lg px-3 py-1.5 focus:outline-none"
+            >
+              {numericColumns.map((col, idx) => (
+                <option key={idx} value={col}>
+                  {col}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <div className="h-72 w-full pt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              {chartType === 'bar' ? (
-                <BarChart data={chartData}>
-                  <XAxis dataKey={xAxisKey} />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey={dataKey} fill="#2563eb" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              ) : (
-                <LineChart data={chartData}>
-                  <XAxis dataKey={xAxisKey} />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey={dataKey} stroke="#2563eb" strokeWidth={2} />
-                </LineChart>
-              )}
-            </ResponsiveContainer>
+          <div className="flex items-center space-x-1 bg-white p-1 rounded-lg border border-slate-200">
+            <button
+              onClick={() => setChartType("line")}
+              className={`px-3 py-1 text-xs font-semibold rounded-md ${
+                chartType === "line"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-600"
+              }`}
+            >
+              Garis (Line)
+            </button>
+            <button
+              onClick={() => setChartType("bar")}
+              className={`px-3 py-1 text-xs font-semibold rounded-md ${
+                chartType === "bar"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-600"
+              }`}
+            >
+              Batang (Bar)
+            </button>
           </div>
+        </div>
+      )}
+
+      {/* TAMPILAN GRAFIK HASIL PARSING EXCEL */}
+      {chartData.length > 0 ? (
+        <div className="bg-slate-900 text-white p-6 rounded-2xl min-h-[260px] flex items-end justify-between gap-1 overflow-x-auto">
+          {chartData.map((row, idx) => {
+            const val = parseFloat(row[selectedColumn]) || 0;
+            const heightPct = Math.round((val / maxVal) * 100);
+            const tanggalLabel =
+              row["Tanggal"] || row["TANGGAL"] || `H-${idx + 1}`;
+
+            return (
+              <div
+                key={idx}
+                className="flex flex-col items-center flex-1 h-48 justify-end group min-w-[20px]"
+              >
+                <div
+                  style={{ height: `${Math.max(heightPct, 4)}%` }}
+                  className={`w-full transition-all duration-300 rounded-t-sm relative group-hover:bg-cyan-400 ${
+                    chartType === "line" ? "bg-blue-500" : "bg-indigo-500"
+                  }`}
+                >
+                  <span className="absolute -top-6 text-[9px] font-bold text-white bg-slate-800 px-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
+                    {val}
+                  </span>
+                </div>
+                <span className="text-[9px] text-slate-400 mt-2 rotate-45 transform origin-left truncate max-w-[30px]">
+                  {String(tanggalLabel).slice(0, 5)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
+          <i className="fa-solid fa-file-excel text-4xl text-emerald-500 mb-2"></i>
+          <p className="text-sm font-semibold text-slate-600">
+            Belum ada file logbook diunggah
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            Unggah file format `.xlsx` Logbook Air Limbah untuk menghasilkan
+            grafik otomatis.
+          </p>
         </div>
       )}
     </div>
   );
-};
-
-export default ExcelChartViewer;
+}
