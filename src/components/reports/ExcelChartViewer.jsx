@@ -2,7 +2,9 @@ import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 
 export default function ExcelChartViewer() {
-  const [sheetInput, setSheetInput] = useState("");
+  const [sheetInput, setSheetInput] = useState(
+    "1Catq1SEdWG61MdY6TVPB2bO1Wk-JYdNxZV2eiW_cX8I",
+  );
   const [sheetNames, setSheetNames] = useState([
     "Januari 2026",
     "Februari 2026",
@@ -15,22 +17,48 @@ export default function ExcelChartViewer() {
     "September 2026",
     "Oktober 2026",
   ]);
-  const [activeSheet, setActiveSheet] = useState("September 2026");
+  const [activeSheet, setActiveSheet] = useState("Februari 2026");
   const [loading, setLoading] = useState(false);
   const [dataRows, setDataRows] = useState([]);
   const [paramCharts, setParamCharts] = useState([]);
 
-  // Fungsi Konversi Simbol (+ / - / ++ / +++) ke Nilai Angka
-  const parseSymbolValue = (val) => {
+  // Fungsi Konversi String (Termasuk mengubah koma ',' menjadi titik '.') ke Angka Desimal
+  const parseNumberWithComma = (val) => {
+    if (val === null || val === undefined || val === "") return 0;
     if (typeof val === "number") return val;
-    if (!val) return 0;
-    const str = String(val).trim();
-    if (str === "+++") return 3;
-    if (str === "++") return 2;
-    if (str === "+" || str === "(+)") return 1;
-    if (str === "-" || str === "(-)") return 0;
+
+    let str = String(val).trim();
+    // Jika format tanggal gviz Date(YYYY,M,D)
+    if (str.startsWith("Date(")) {
+      return 0;
+    }
+    // Ganti koma dengan titik untuk desimal
+    str = str.replace(",", ".");
     const num = parseFloat(str);
     return isNaN(num) ? 0 : num;
+  };
+
+  // Fungsi Parsing Tanggal dari Respon GViz Google Sheets
+  const parseGVizDate = (val) => {
+    if (!val) return "";
+    const str = String(val);
+    if (str.startsWith("Date(")) {
+      const parts = str.replace("Date(", "").replace(")", "").split(",");
+      if (parts.length >= 3) {
+        const year = parts[0];
+        const month = String(parseInt(parts[1]) + 1).padStart(2, "0");
+        const day = String(parts[2]).padStart(2, "0");
+        return `${month}-${day}`;
+      }
+    }
+    return str.slice(0, 10);
+  };
+
+  // Fungsi Parsing Simbol (+ / -) untuk Aliran
+  const parseAliran = (val) => {
+    if (!val) return 0;
+    const str = String(val).trim();
+    return str === "+" || str === "(+)" ? 1 : 0;
   };
 
   const extractSpreadsheetId = (url) => {
@@ -44,7 +72,7 @@ export default function ExcelChartViewer() {
     }
   }, [activeSheet]);
 
-  // 1. BACA DATA DARI GOOGLE SHEETS LIVE
+  // BACA DATA DARI GOOGLE SHEETS LIVE
   const fetchGoogleSheetData = async (sheetName) => {
     if (!sheetInput) return alert("Silakan masukkan link / ID Google Sheets!");
     setLoading(true);
@@ -66,27 +94,29 @@ export default function ExcelChartViewer() {
       const rows = data.table.rows || [];
 
       const cleanRows = [];
-      rows.slice(6).forEach((r) => {
+      // Data harian dimulai dari baris indeks 5 (Baris ke-6 di Excel: 02-01-2026)
+      rows.slice(5).forEach((r) => {
         if (!r.c) return;
-        const tanggalVal = r.c[0]?.v || r.c[1]?.v || r.c[13]?.v;
+
+        // Ambil Tanggal (Kolom A / Index 0)
+        const rawDate = r.c[0]?.f || r.c[0]?.v;
+        if (!rawDate) return;
+
+        const formattedDate = parseGVizDate(rawDate);
         if (
-          tanggalVal &&
-          String(tanggalVal).includes("202") &&
-          !String(tanggalVal).toLowerCase().includes("keterangan")
-        ) {
-          cleanRows.push({
-            tanggal: String(tanggalVal),
-            suhuKiri: parseSymbolValue(r.c[2]?.v),
-            phKiri: parseSymbolValue(r.c[3]?.v),
-            aliranKiri: parseSymbolValue(r.c[4]?.v),
-            tdsKiri: parseSymbolValue(r.c[6]?.v),
-            debitKiri: parseSymbolValue(r.c[10]?.v),
-            suhuKanan: parseSymbolValue(r.c[14]?.v),
-            phKanan: parseSymbolValue(r.c[15]?.v),
-            aliranKanan: parseSymbolValue(r.c[16]?.v),
-            tdsKanan: parseSymbolValue(r.c[19]?.v),
-          });
-        }
+          !formattedDate ||
+          formattedDate.toLowerCase().includes("keterangan")
+        )
+          return;
+
+        cleanRows.push({
+          tanggal: formattedDate,
+          suhuKiri: parseNumberWithComma(r.c[2]?.v ?? r.c[2]?.f), // Kolom C: Suhu
+          phKiri: parseNumberWithComma(r.c[3]?.v ?? r.c[3]?.f), // Kolom D: pH
+          aliranKiri: parseAliran(r.c[4]?.v ?? r.c[4]?.f), // Kolom E: Aliran (+/-)
+          tdsKiri: parseNumberWithComma(r.c[7]?.v ?? r.c[7]?.f), // Kolom H: TDS
+          debitKiri: parseNumberWithComma(r.c[10]?.v ?? r.c[10]?.f), // Kolom K: Debit Meter
+        });
       });
 
       setDataRows(cleanRows);
@@ -101,7 +131,7 @@ export default function ExcelChartViewer() {
     }
   };
 
-  // 2. BACA FILE EXCEL MANUAL (.XLSX)
+  // BACA FILE EXCEL MANUAL (.XLSX)
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -118,24 +148,19 @@ export default function ExcelChartViewer() {
         const rawData = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
         const cleanRows = [];
-        rawData.slice(6).forEach((r) => {
-          const tanggalVal = r[0] || r[1] || r[13];
+        rawData.slice(5).forEach((r) => {
+          const tanggalVal = r[0];
           if (
             tanggalVal &&
-            String(tanggalVal).includes("202") &&
             !String(tanggalVal).toLowerCase().includes("keterangan")
           ) {
             cleanRows.push({
-              tanggal: String(tanggalVal),
-              suhuKiri: parseSymbolValue(r[2]),
-              phKiri: parseSymbolValue(r[3]),
-              aliranKiri: parseSymbolValue(r[4]),
-              tdsKiri: parseSymbolValue(r[6]),
-              debitKiri: parseSymbolValue(r[10]),
-              suhuKanan: parseSymbolValue(r[14]),
-              phKanan: parseSymbolValue(r[15]),
-              aliranKanan: parseSymbolValue(r[16]),
-              tdsKanan: parseSymbolValue(r[19]),
+              tanggal: String(tanggalVal).slice(0, 10),
+              suhuKiri: parseNumberWithComma(r[2]),
+              phKiri: parseNumberWithComma(r[3]),
+              aliranKiri: parseAliran(r[4]),
+              tdsKiri: parseNumberWithComma(r[7]),
+              debitKiri: parseNumberWithComma(r[10]),
             });
           }
         });
@@ -149,60 +174,35 @@ export default function ExcelChartViewer() {
   const setupCharts = () => {
     setParamCharts([
       {
-        title: "Grafik Suhu (°C) - Outlet Kiri",
+        title: "Grafik Suhu (°C) - Outlet I",
         key: "suhuKiri",
         type: "suhu",
         minSafe: 25,
         maxSafe: 38,
       },
       {
-        title: "Grafik pH - Outlet Kiri",
+        title: "Grafik pH - Outlet I",
         key: "phKiri",
         type: "ph",
         minSafe: 6,
         maxSafe: 9,
       },
       {
-        title: "Grafik Aliran - Outlet Kiri (1=Lancar, 0=Tdk)",
+        title: "Grafik Aliran - Outlet I (1=Lancar, 0=Tidak)",
         key: "aliranKiri",
         type: "kategori",
       },
       {
-        title: "Grafik TDS - Outlet Kiri",
+        title: "Grafik TDS - Outlet I",
         key: "tdsKiri",
         type: "normal",
         color: "bg-indigo-500",
       },
       {
-        title: "Grafik Debit IPAL (M3)",
+        title: "Grafik Meter Debit IPAL",
         key: "debitKiri",
         type: "normal",
         color: "bg-blue-500",
-      },
-      {
-        title: "Grafik Suhu (°C) - Bak Akhir Kanan",
-        key: "suhuKanan",
-        type: "suhu",
-        minSafe: 25,
-        maxSafe: 38,
-      },
-      {
-        title: "Grafik pH - Bak Akhir Kanan",
-        key: "phKanan",
-        type: "ph",
-        minSafe: 6,
-        maxSafe: 9,
-      },
-      {
-        title: "Grafik Aliran - Bak Akhir Kanan",
-        key: "aliranKanan",
-        type: "kategori",
-      },
-      {
-        title: "Grafik TDS - Bak Akhir Kanan",
-        key: "tdsKanan",
-        type: "normal",
-        color: "bg-purple-500",
       },
     ]);
   };
@@ -231,11 +231,11 @@ export default function ExcelChartViewer() {
         <div>
           <h3 className="text-lg font-bold text-slate-800 flex items-center">
             <i className="fa-solid fa-file-excel text-emerald-600 mr-2.5"></i>{" "}
-            Dashboard Visualisasi Logbook Air Limbah
+            Logbook Air Limbah RS Hermina Karawang
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Menampilkan angka nilai dan tanggal secara langsung pada setiap
-            batang diagram.
+            Visualisasi data presisi membaca angka desimal koma (,) dan tanggal
+            dari Google Sheets.
           </p>
         </div>
 
@@ -251,12 +251,12 @@ export default function ExcelChartViewer() {
         </button>
       </div>
 
-      {/* Input Google Sheets / File Upload */}
+      {/* Input Link Google Sheets */}
       <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
         <div className="flex justify-between items-center">
           <label className="text-xs font-bold text-slate-700 flex items-center">
-            <i className="fa-solid fa-link text-blue-600 mr-1.5"></i> Masukkan
-            Link / ID Google Sheets:
+            <i className="fa-solid fa-link text-blue-600 mr-1.5"></i> Link / ID
+            Google Sheets:
           </label>
           <div className="flex items-center space-x-2">
             <span className="text-[11px] text-slate-400">
@@ -288,31 +288,30 @@ export default function ExcelChartViewer() {
         </div>
       </div>
 
-      {sheetInput && (
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-            <i className="fa-solid fa-calendar-days mr-1.5 text-blue-600"></i>{" "}
-            Pilih Sheet Bulan:
-          </label>
-          <div className="flex flex-wrap gap-1.5">
-            {sheetNames.map((m) => (
-              <button
-                key={m}
-                onClick={() => setActiveSheet(m)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition ${
-                  activeSheet === m
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-200"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
+      {/* Tab Sheet Bulan */}
+      <div className="space-y-2">
+        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+          <i className="fa-solid fa-calendar-days mr-1.5 text-blue-600"></i>{" "}
+          Pilih Sheet Bulan:
+        </label>
+        <div className="flex flex-wrap gap-1.5">
+          {sheetNames.map((m) => (
+            <button
+              key={m}
+              onClick={() => setActiveSheet(m)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition ${
+                activeSheet === m
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-200"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {m}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
-      {/* DIAGRAM DENGAN NILAI ANGKA & TANGGAL LANGSUNG TERLIHAT */}
+      {/* TAMPILAN GRAFIK DENGAN ANGKAS ASLI DAN TANGGAL AKURAT */}
       {dataRows.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
           {paramCharts.map((chart, idx) => {
@@ -337,26 +336,19 @@ export default function ExcelChartViewer() {
                   </span>
                 </div>
 
-                {/* Area Grafik Scrollable agar Tanggal & Nilai Tidak Saling Tumpuk */}
                 <div className="h-56 overflow-x-auto pb-4">
-                  <div className="h-full flex items-end justify-start gap-3 min-w-[650px] pt-8 px-2">
+                  <div className="h-full flex items-end justify-start gap-3 min-w-[700px] pt-8 px-2">
                     {dataRows.map((row, rIdx) => {
                       const val = row[chart.key];
                       const heightPct = Math.round((val / maxVal) * 100);
                       const barBg = getBarColor(val, chart);
-
-                      // Format tanggal pendek (Misal: 09-02)
-                      const displayDate =
-                        row.tanggal.length >= 5
-                          ? row.tanggal.slice(0, 5)
-                          : row.tanggal;
 
                       return (
                         <div
                           key={rIdx}
                           className="flex flex-col items-center flex-1 h-full justify-end min-w-[28px]"
                         >
-                          {/* Angka Nilai Tampil Permanen di Atas Batang */}
+                          {/* Angka Nilai Tampil Tepat dan Presisi */}
                           <span className="text-[10px] font-extrabold text-cyan-300 mb-1">
                             {val}
                           </span>
@@ -367,9 +359,9 @@ export default function ExcelChartViewer() {
                             className={`w-full ${barBg} rounded-t-md transition-all duration-300 relative flex justify-center`}
                           ></div>
 
-                          {/* Tanggal Tampil Jelas Miring di Bawah Batang */}
+                          {/* Tanggal Terbaca Jelas (02-01, 02-02, dst) */}
                           <span className="text-[9px] font-semibold text-slate-300 mt-2 -rotate-45 transform origin-top-left whitespace-nowrap">
-                            {displayDate}
+                            {row.tanggal}
                           </span>
                         </div>
                       );
@@ -382,13 +374,9 @@ export default function ExcelChartViewer() {
         </div>
       ) : (
         <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
-          <i className="fa-solid fa-link text-3xl text-slate-300 mb-2 block"></i>
+          <i className="fa-solid fa-spinner animate-spin text-2xl text-blue-600 mb-2 block"></i>
           <p className="text-sm font-semibold text-slate-600">
-            Belum Ada Google Sheets Terhubung
-          </p>
-          <p className="text-xs text-slate-400 mt-1">
-            Tempelkan link Google Sheets Anda di atas lalu klik{" "}
-            <strong>Hubungkan Data</strong>.
+            Sedang menyelaraskan data dengan Google Sheets...
           </p>
         </div>
       )}
