@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-const API_BASE = "https://laporan-backend-seven.vercel.app/api";
+const BACKEND_URL = "https://laporan-backend-seven.vercel.app";
+const API_BASE = `${BACKEND_URL}/api`;
 
 export default function PhotoGallery() {
   const [photos, setPhotos] = useState([]);
