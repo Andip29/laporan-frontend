@@ -17,25 +17,54 @@ export default function ExcelChartViewer() {
     "September 2026",
     "Oktober 2026",
   ]);
-  const [activeSheet, setActiveSheet] = useState("Februari 2026");
+  const [activeSheet, setActiveSheet] = useState("Januari 2026");
   const [loading, setLoading] = useState(false);
   const [dataRows, setDataRows] = useState([]);
   const [paramCharts, setParamCharts] = useState([]);
 
-  // Fungsi mengubah string bernilai koma (seperti '25,4') menjadi angka float (25.4)
-  const cleanNumber = (val) => {
-    if (val === null || val === undefined || val === "") return 0;
-    if (typeof val === "number") return val;
-    let str = String(val).trim().replace(",", ".");
+  // 1. Konversi Seri Angka Tanggal Excel (46027) ke Format Tanggal "DD-MM"
+  const parseExcelDate = (val) => {
+    if (!val) return "";
+    const str = String(val).trim();
+
+    // Jika bernilai angka serial Excel (seperti 46027 / 46027.0000)
     const num = parseFloat(str);
-    return isNaN(num) ? 0 : num;
+    if (!isNaN(num) && num > 40000 && num < 60000) {
+      const dateObj = XLSX.SSF.parse_date_code(num);
+      if (dateObj) {
+        const day = String(dateObj.d).padStart(2, "0");
+        const month = String(dateObj.m).padStart(2, "0");
+        return `${day}-${month}`;
+      }
+    }
+
+    // Jika string tanggal biasa
+    if (str.length >= 5) return str.slice(0, 5);
+    return str;
   };
 
-  // Fungsi mendeteksi aliran '+' (1) atau '-' (0)
-  const cleanAliran = (val) => {
-    if (!val) return 0;
-    const str = String(val).trim();
-    return str.includes("+") ? 1 : 0;
+  // 2. Koreksi Nilai Suhu (275 -> 27.5)
+  const parseSuhu = (val) => {
+    let num = parseFloat(String(val).replace(",", "."));
+    if (isNaN(num)) return 0;
+    if (num > 100) num = num / 10; // 275 -> 27.5
+    return parseFloat(num.toFixed(1));
+  };
+
+  // 3. Koreksi Nilai pH (742 -> 7.42)
+  const parsePH = (val) => {
+    let num = parseFloat(String(val).replace(",", "."));
+    if (isNaN(num)) return 0;
+    if (num > 100)
+      num = num / 100; // 742 -> 7.42
+    else if (num > 20) num = num / 10; // 74 -> 7.4
+    return parseFloat(num.toFixed(2));
+  };
+
+  // 4. Clean Angka Normal
+  const parseNormalNum = (val) => {
+    const num = parseFloat(String(val).replace(",", "."));
+    return isNaN(num) ? 0 : num;
   };
 
   const extractSpreadsheetId = (url) => {
@@ -55,8 +84,6 @@ export default function ExcelChartViewer() {
 
     try {
       const spreadsheetId = extractSpreadsheetId(sheetInput);
-
-      // Ambil format CSV langsung dari Google Sheets agar struktur kolom presisi
       const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
         sheetName,
       )}`;
@@ -64,7 +91,6 @@ export default function ExcelChartViewer() {
       const res = await fetch(csvUrl);
       const csvText = await res.text();
 
-      // Parse CSV menggunakan XLSX
       const workbook = XLSX.read(csvText, { type: "string" });
       const firstSheetName = workbook.SheetNames[0];
       const rawData = XLSX.utils.sheet_to_json(
@@ -75,58 +101,29 @@ export default function ExcelChartViewer() {
         },
       );
 
-      // Cari baris tempat tanggal dimulai (Baris yang memuat teks "02-" atau tanggal)
-      let startRowIndex = -1;
-      for (let i = 0; i < rawData.length; i++) {
-        const firstCell = String(rawData[i][0] || "").trim();
-        if (
-          firstCell.match(/^\d{2}-\d{2}-\d{4}/) ||
-          firstCell.match(/^\d{1,2}\/\d{1,2}/)
-        ) {
-          startRowIndex = i;
-          break;
-        }
-      }
-
-      if (startRowIndex === -1) startRowIndex = 5; // Default baris ke-6
-
       const parsedData = [];
-      for (let i = startRowIndex; i < rawData.length; i++) {
-        const row = rawData[i];
-        const tanggalCell = String(row[0] || "").trim();
 
-        // Stop jika menemukan baris Keterangan / Tanda Tangan
-        if (!tanggalCell || tanggalCell.toLowerCase().includes("keterangan")) {
-          break;
-        }
+      rawData.forEach((row) => {
+        const rawDate = row[0];
+        if (!rawDate) return;
+
+        const dateStr = parseExcelDate(rawDate);
+        if (!dateStr || dateStr.toLowerCase().includes("keterangan")) return;
 
         parsedData.push({
-          tanggal: tanggalCell.slice(0, 10),
-          // Outlet I (Kiri)
-          suhuKiri: cleanNumber(row[1]), // Kolom B
-          phKiri: cleanNumber(row[2]), // Kolom C
-          aliranKiri: cleanAliran(row[3]), // Kolom D
-          tdsKiri: cleanNumber(row[6]), // Kolom G
-          usiaIkan: cleanNumber(row[9]), // Kolom J
-          debitKiri: cleanNumber(row[10]), // Kolom K
-          selisihKiri: cleanNumber(row[11]), // Kolom L
-
-          // Outlet II (Kanan)
-          suhuKanan: cleanNumber(row[14]), // Kolom O
-          phKanan: cleanNumber(row[15]), // Kolom P
-          aliranKanan: cleanAliran(row[16]), // Kolom Q
-          tdsKanan: cleanNumber(row[19]), // Kolom T
-          selisihKanan: cleanNumber(row[22]), // Kolom W
+          tanggal: dateStr,
+          suhuKiri: parseSuhu(row[1]), // Suhu Outlet I
+          phKiri: parsePH(row[2]), // pH Outlet I
+          tdsKiri: parseNormalNum(row[6]), // TDS Outlet I
+          selisihKiri: parseNormalNum(row[11]), // Selisih Debit Outlet I
         });
-      }
+      });
 
       setDataRows(parsedData);
       setupCharts();
     } catch (err) {
       console.error("Gagal membaca Google Sheets:", err);
-      alert(
-        "Gagal memuat data. Pastikan Google Sheet diatur ke 'Siapa saja yang memiliki link'",
-      );
+      alert("Gagal memuat data Google Sheets.");
     } finally {
       setLoading(false);
     }
@@ -160,38 +157,6 @@ export default function ExcelChartViewer() {
         type: "normal",
         color: "bg-blue-500",
       },
-      {
-        title: "Grafik Usia Ikan (Hari)",
-        key: "usiaIkan",
-        type: "normal",
-        color: "bg-cyan-600",
-      },
-      {
-        title: "Grafik Suhu (°C) - Outlet II",
-        key: "suhuKanan",
-        type: "suhu",
-        minSafe: 25,
-        maxSafe: 38,
-      },
-      {
-        title: "Grafik pH - Outlet II",
-        key: "phKanan",
-        type: "ph",
-        minSafe: 6,
-        maxSafe: 9,
-      },
-      {
-        title: "Grafik TDS - Outlet II",
-        key: "tdsKanan",
-        type: "normal",
-        color: "bg-purple-500",
-      },
-      {
-        title: "Grafik Selisih Debit (M3) - Outlet II",
-        key: "selisihKanan",
-        type: "normal",
-        color: "bg-teal-500",
-      },
     ]);
   };
 
@@ -219,7 +184,7 @@ export default function ExcelChartViewer() {
             Logbook Air Limbah RS Hermina Karawang
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Membaca data CSV secara presisi dari Google Sheets.
+            Visualisasi akurat angka desimal (Suhu & pH) serta tanggal otomatis.
           </p>
         </div>
 
@@ -235,7 +200,7 @@ export default function ExcelChartViewer() {
         </button>
       </div>
 
-      {/* Input Google Sheets */}
+      {/* Input Link Google Sheets */}
       <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
         <label className="text-xs font-bold text-slate-700 flex items-center">
           <i className="fa-solid fa-link text-blue-600 mr-1.5"></i> Link / ID
@@ -281,7 +246,7 @@ export default function ExcelChartViewer() {
         </div>
       </div>
 
-      {/* TAMPILAN GRAFIK */}
+      {/* TAMPILAN GRAFIK HASIL KOREKSI DESIMAL DAN TANGGAL */}
       {dataRows.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
           {paramCharts.map((chart, idx) => {
@@ -318,6 +283,7 @@ export default function ExcelChartViewer() {
                           key={rIdx}
                           className="flex flex-col items-center flex-1 h-full justify-end min-w-[28px]"
                         >
+                          {/* Angka Presisi (misal: 27.5 atau 7.42) */}
                           <span className="text-[10px] font-extrabold text-cyan-300 mb-1">
                             {val}
                           </span>
@@ -327,6 +293,7 @@ export default function ExcelChartViewer() {
                             className={`w-full ${barBg} rounded-t-md transition-all duration-300 relative flex justify-center`}
                           ></div>
 
+                          {/* Tanggal Teks Asli (misal: 01-01, 02-01) */}
                           <span className="text-[9px] font-semibold text-slate-300 mt-2 -rotate-45 transform origin-top-left whitespace-nowrap">
                             {row.tanggal}
                           </span>
@@ -343,7 +310,7 @@ export default function ExcelChartViewer() {
         <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
           <i className="fa-solid fa-spinner animate-spin text-2xl text-blue-600 mb-2 block"></i>
           <p className="text-sm font-semibold text-slate-600">
-            Menyambungkan dan membaca CSV Google Sheets...
+            Sedang menyelaraskan data desimal dan tanggal...
           </p>
         </div>
       )}
