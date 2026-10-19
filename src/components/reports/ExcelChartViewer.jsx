@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 
 export default function ExcelChartViewer() {
@@ -6,77 +6,122 @@ export default function ExcelChartViewer() {
   const [selectedColumn, setSelectedColumn] = useState("");
   const [numericColumns, setNumericColumns] = useState([]);
   const [chartType, setChartType] = useState("line");
+  const [loading, setLoading] = useState(false);
 
-  // Handler Unggah & Parse File Excel/Logbook
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  // 1. MASUKKAN LINK CSV GOOGLE SHEETS ANDA DI SINI
+  const [sheetUrl, setSheetUrl] = useState(
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1v.../pub?output=csv",
+  );
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const bstr = evt.target.result;
-      const wb = XLSX.read(bstr, { type: "binary" });
+  // Ambil data otomatis saat halaman pertama kali dibuka
+  useEffect(() => {
+    if (sheetUrl && !sheetUrl.includes("2PACX-1v...")) {
+      fetchGoogleSheetData(sheetUrl);
+    }
+  }, []);
 
-      // Ambil sheet pertama
-      const wsName = wb.SheetNames[0];
-      const ws = wb.Sheets[wsName];
+  // Fungsi Fetch Data Real-time dari Google Sheets
+  const fetchGoogleSheetData = async (url) => {
+    if (!url) return alert("Masukkan URL Publikasi CSV Google Sheets!");
+    setLoading(true);
+    try {
+      const response = await fetch(url);
+      const csvText = await response.text();
 
-      // Convert sheet ke JSON
-      const dataJson = XLSX.utils.sheet_to_json(ws, { defval: "" });
-
-      if (dataJson.length === 0) return alert("File Excel kosong!");
-
-      // Filter nama kolom yang berisi angka untuk opsi grafik
-      const keys = Object.keys(dataJson[0]);
-      const validNumCols = keys.filter((key) => {
-        return dataJson.some((row) => !isNaN(parseFloat(row[key])));
+      // Parse CSV menggunakan XLSX/SheetJS
+      const workbook = XLSX.read(csvText, { type: "string" });
+      const sheetName = workbook.SheetNames[0];
+      const dataJson = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+        defval: "",
       });
+
+      if (dataJson.length === 0) {
+        alert("Data dari Google Sheets kosong!");
+        return;
+      }
+
+      // Deteksi kolom yang berisi angka
+      const keys = Object.keys(dataJson[0]);
+      const validNumCols = keys.filter((key) =>
+        dataJson.some((row) => !isNaN(parseFloat(row[key]))),
+      );
 
       setNumericColumns(validNumCols);
       if (validNumCols.length > 0) {
-        setSelectedColumn(validNumCols[validNumCols.length - 1]); // Default pilih kolom selisih/debit
+        setSelectedColumn(validNumCols[validNumCols.length - 1]);
       }
 
       setChartData(dataJson);
-    };
-    reader.readAsBinaryString(file);
+    } catch (err) {
+      console.error("Gagal mengambil data Google Sheets:", err);
+      alert(
+        "Gagal memuat data dari Google Sheets. Pastikan link dipublikasikan sebagai CSV!",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Mencari nilai maksimum untuk skala grafik
   const maxVal = Math.max(
     ...chartData.map((d) => parseFloat(d[selectedColumn]) || 0),
     10,
   );
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6 w-full">
+      {/* Header & Pengaturan URL Google Sheets */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
         <div>
           <h3 className="text-lg font-bold text-slate-800 flex items-center">
-            <i className="fa-solid fa-chart-line text-blue-600 mr-2"></i>{" "}
-            Visualisasi Logbook Air Limbah
+            <i className="fa-solid fa-file-excel text-emerald-600 mr-2"></i>{" "}
+            Integrasi Live Google Sheets
           </h3>
-          <p className="text-xs text-slate-500">
-            Unggah logbook Excel (misal: Logbook Air Limbah Harian) untuk
-            melihat grafik parameter otomatis.
+          <p className="text-xs text-slate-500 mt-0.5">
+            Grafik akan diperbarui secara otomatis mengikuti data terbaru dari
+            Google Sheets.
           </p>
         </div>
 
-        {/* Input File Excel */}
-        <input
-          type="file"
-          accept=".xlsx, .xls, .csv"
-          onChange={handleFileUpload}
-          className="text-xs border border-slate-300 rounded-xl p-2 bg-slate-50 cursor-pointer"
-        />
+        <button
+          onClick={() => fetchGoogleSheetData(sheetUrl)}
+          disabled={loading}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-sm flex items-center"
+        >
+          <i
+            className={`fa-solid fa-rotate mr-2 ${loading ? "animate-spin" : ""}`}
+          ></i>
+          {loading ? "Memuat Data..." : "Refresh Data Live"}
+        </button>
       </div>
 
-      {/* Kontrol Pilihan Parameter/Kolom & Jenis Grafik */}
+      {/* Form Input Link CSV Google Sheets */}
+      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+        <label className="block text-xs font-semibold text-slate-700">
+          URL Publikasi CSV Google Sheets:
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={sheetUrl}
+            onChange={(e) => setSheetUrl(e.target.value)}
+            placeholder="Tempel link CSV dari Google Sheets di sini..."
+            className="flex-1 text-xs border border-slate-300 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+          <button
+            onClick={() => fetchGoogleSheetData(sheetUrl)}
+            className="bg-blue-600 text-white text-xs px-4 py-2 rounded-xl font-semibold hover:bg-blue-700"
+          >
+            Hubungkan
+          </button>
+        </div>
+      </div>
+
+      {/* Kontrol Pilihan Parameter & Grafik */}
       {chartData.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-100 p-3 rounded-xl">
           <div className="flex items-center space-x-2">
             <label className="text-xs font-semibold text-slate-600">
-              Pilih Parameter Grafik:
+              Parameter Grafik:
             </label>
             <select
               value={selectedColumn}
@@ -94,7 +139,7 @@ export default function ExcelChartViewer() {
           <div className="flex items-center space-x-1 bg-white p-1 rounded-lg border border-slate-200">
             <button
               onClick={() => setChartType("line")}
-              className={`px-3 py-1 text-xs font-semibold rounded-md ${
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition ${
                 chartType === "line"
                   ? "bg-blue-600 text-white"
                   : "text-slate-600"
@@ -104,7 +149,7 @@ export default function ExcelChartViewer() {
             </button>
             <button
               onClick={() => setChartType("bar")}
-              className={`px-3 py-1 text-xs font-semibold rounded-md ${
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition ${
                 chartType === "bar"
                   ? "bg-blue-600 text-white"
                   : "text-slate-600"
@@ -116,7 +161,7 @@ export default function ExcelChartViewer() {
         </div>
       )}
 
-      {/* TAMPILAN GRAFIK HASIL PARSING EXCEL */}
+      {/* TAMPILAN VISUALISASI DIAGRAM */}
       {chartData.length > 0 ? (
         <div className="bg-slate-900 text-white p-6 rounded-2xl min-h-[260px] flex items-end justify-between gap-1 overflow-x-auto">
           {chartData.map((row, idx) => {
@@ -148,14 +193,14 @@ export default function ExcelChartViewer() {
           })}
         </div>
       ) : (
-        <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
-          <i className="fa-solid fa-file-excel text-4xl text-emerald-500 mb-2"></i>
+        <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
+          <i className="fa-solid fa-link text-3xl text-slate-300 mb-2"></i>
           <p className="text-sm font-semibold text-slate-600">
-            Belum ada file logbook diunggah
+            Belum terhubung ke Google Sheets
           </p>
           <p className="text-xs text-slate-400 mt-1">
-            Unggah file format `.xlsx` Logbook Air Limbah untuk menghasilkan
-            grafik otomatis.
+            Masukkan URL CSV Google Sheets di atas lalu klik{" "}
+            <strong>Hubungkan</strong>.
           </p>
         </div>
       )}
