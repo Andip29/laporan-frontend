@@ -15,7 +15,7 @@ import WorksheetManager from "./components/worksheet/WorksheetManager";
 import PhotoGallery from "./components/gallery/PhotoGallery";
 import LoginModal from "./components/auth/LoginModal";
 
-// 1. Impor Komponent ExcelChartViewer dari folder reports
+// Impor Komponen ExcelChartViewer untuk Halaman Grafik Terpisah
 import ExcelChartViewer from "./components/reports/ExcelChartViewer";
 
 export default function App() {
@@ -50,7 +50,7 @@ export default function App() {
   const [photoFiles, setPhotoFiles] = useState([]);
 
   useEffect(() => {
-    // Cek apakah ada data user terimpan di LocalStorage
+    // Cek apakah ada data user tersimpan di LocalStorage
     const savedUser = localStorage.getItem("user");
     if (savedUser) {
       const parsedUser = JSON.parse(savedUser);
@@ -179,13 +179,10 @@ export default function App() {
       />
 
       <main className="w-full px-6 md:px-10 py-8 flex-1">
-        {/* Modul 1: Dashboard */}
+        {/* Modul 1: Dashboard Ringkas */}
         {activeTab === "dashboard" && (
           <div className="space-y-6 w-full">
             <StatsCards stats={stats} />
-
-            {/* 2. Menampilkan Komponen Visualisasi Grafik Excel di Dashboard */}
-            <ExcelChartViewer />
 
             <FilterBar
               search={search}
@@ -205,16 +202,53 @@ export default function App() {
           </div>
         )}
 
-        {/* Modul 2: Drive Berkas */}
-        {activeTab === "drive" && <DriveSection />}
-
-        {/* Modul 3: Worksheet Pekerjaan */}
+        {/* Modul 2: Excel / Worksheet Pekerjaan */}
         {activeTab === "worksheet" && <WorksheetManager />}
 
-        {/* Modul 4: Galeri Foto */}
+        {/* Modul 3: Dokumen Word */}
+        {activeTab === "documents" && (
+          <div className="bg-white p-8 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+            <h2 className="text-xl font-bold text-slate-800 flex items-center">
+              <i className="fa-solid fa-file-word text-blue-600 mr-2.5"></i>{" "}
+              Pengolah Dokumen Word
+            </h2>
+            <p className="text-xs text-slate-500">
+              Buat, edit, dan simpan dokumen naskah/surat secara langsung di
+              aplikasi.
+            </p>
+            <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-xl">
+              <i className="fa-solid fa-file-lines text-4xl text-slate-300 mb-2"></i>
+              <p className="text-sm text-slate-500 font-medium">
+                Modul Dokumen Word siap dihubungkan dengan komponen Text Editor.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Modul 4: Grafik & Analisis Data (Halaman Terpisah) */}
+        {activeTab === "analytics" && (
+          <div className="space-y-6 w-full">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center">
+                <i className="fa-solid fa-chart-line text-blue-600 mr-2.5"></i>{" "}
+                Visualisasi Grafik & Analisis Data
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Analisis tren dan visualisasi grafik lengkap dari data Excel dan
+                Laporan.
+              </p>
+            </div>
+            <ExcelChartViewer />
+          </div>
+        )}
+
+        {/* Modul 5: Galeri Foto */}
         {activeTab === "gallery" && <PhotoGallery />}
 
-        {/* Modul 5: Form Input Laporan Harian */}
+        {/* Modul 6: Drive Berkas */}
+        {activeTab === "drive" && <DriveSection />}
+
+        {/* Modul 7: Form Input Laporan Harian */}
         {activeTab === "form" && (
           <div className="space-y-6 w-full">
             <div className="flex items-center justify-between">
@@ -290,9 +324,8 @@ export default function App() {
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4 w-full">
                 <h3 className="font-bold text-slate-800 text-md border-b pb-2 border-slate-100 flex items-center">
                   <i className="fa-solid fa-file-arrow-up text-blue-600 mr-2"></i>{" "}
-                  Upload Lampiran Berkonsultasi & Dokumentasi
+                  Upload Lampiran Berkas & Dokumentasi
                 </h3>
-                {/* 3. Menyesuaikan Input File agar Menerima Word, Excel, CSV, PDF, dan Gambar */}
                 <input
                   type="file"
                   multiple

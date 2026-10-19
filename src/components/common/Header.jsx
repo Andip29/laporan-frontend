@@ -2,10 +2,12 @@ import React from "react";
 
 export default function Header({ activeTab, setActiveTab, user, onLogout }) {
   const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: "fa-chart-line" },
-    { id: "drive", label: "Drive Berkas", icon: "fa-folder-open" },
-    { id: "worksheet", label: "Worksheet", icon: "fa-list-check" },
+    { id: "dashboard", label: "Dashboard", icon: "fa-chart-pie" },
+    { id: "worksheet", label: "Excel (Worksheet)", icon: "fa-file-excel" },
+    { id: "documents", label: "Dokumen Word", icon: "fa-file-word" },
+    { id: "analytics", label: "Grafik & Analisis", icon: "fa-chart-line" },
     { id: "gallery", label: "Galeri Foto", icon: "fa-images" },
+    { id: "drive", label: "Drive Berkas", icon: "fa-folder-open" },
     { id: "form", label: "Buat Laporan", icon: "fa-plus-circle" },
   ];
 
